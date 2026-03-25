@@ -1,0 +1,159 @@
+import cv2
+import numpy as np
+
+class Board:
+
+    def __init__(self):
+        self.points = []       # 四个端点坐标，顺序: [左上, 左下, 右下, 右上]
+        self.center = None     # 对角线交点坐标 (x, y)
+        self.area = 0.0        # 轮廓面积
+        self.is_valid = False  # 标志位：当前帧是否成功检测到有效靶板
+
+
+class Detector:
+    
+    def __init__(self, min_area=5000, max_area=500000):
+        self.board_min_area = min_area
+        self.board_max_area = max_area
+        self.board = Board()
+
+    def process_image(self, frame):
+        
+        # 转灰度
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # 反二值化 (cv2.THRESH_BINARY_INV)
+        # 考虑到现场光照，建议加上大津法 (THRESH_OTSU) 自动寻找最优阈值
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+
+        # 核心检测逻辑
+        self.find_board(binary)
+
+        # 绘制可视化结果
+        annotated_frame = frame.copy()
+        self._draw_annotations(annotated_frame)
+
+        return annotated_frame, self.board
+
+    def find_board(self, binary):
+        """
+        轮廓查找与排序逻辑（包含你提供的双重排序法）
+        """
+        boards = []
+        # 使用 cv2.RETR_CCOMP 以获取内外轮廓的层次结构
+        contours, hierarchy = cv2.findContours(binary, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # 安全检查：如果画面中没有任何轮廓，hierarchy 将为 None
+        if hierarchy is None:
+            self.board = Board()
+            return self.board
+
+        # 首先尝试寻找内轮廓
+        inner_contours = []
+        for i, contour in enumerate(contours):
+            if hierarchy[0][i][3] != -1:  # 有父轮廓的轮廓（内轮廓）
+                inner_contours.append((i, contour))
+        
+        # 如果没有内轮廓，则使用外轮廓（无父轮廓的轮廓）
+        if inner_contours:
+            target_contours = inner_contours
+        else:
+            target_contours = [(i, c) for i, c in enumerate(contours) if hierarchy[0][i][3] == -1]
+        
+        for i, contour in target_contours:
+            area = cv2.contourArea(contour)
+            if self.board_min_area < area < self.board_max_area:
+                peri = cv2.arcLength(contour, True)
+                approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+                
+                if len(approx) == 4:
+                    points = approx.reshape(4, 2)
+                    
+                    # 原有排序逻辑 (和差排序)
+                    sum_xy = points.sum(axis=1)
+                    diff_xy = points[:, 0] - points[:, 1]
+                    sorted_points = [
+                        points[np.argmin(sum_xy)],  # 左上
+                        points[np.argmax(diff_xy)], # 左下
+                        points[np.argmax(sum_xy)],  # 右下
+                        points[np.argmin(diff_xy)]  # 右上
+                    ]
+                    
+                    # 检查排序后的点是否有重合
+                    unique_points = set(tuple(pt) for pt in sorted_points)
+                    
+                    if len(unique_points) < 4:
+                        # 如果有任何点重合，重新按极值排序
+                        sorted_points = [
+                            points[np.argmin(points[:, 0])],  # 左上：最左边的x坐标
+                            points[np.argmin(points[:, 1])],  # 左下：最上面的y坐标
+                            points[np.argmax(points[:, 0])],  # 右下：最右边的x坐标
+                            points[np.argmax(points[:, 1])]   # 右上：最下面的y坐标
+                        ]
+                    
+                    # 实例化
+                    board = Board()
+                    board.points = [tuple(map(int, pt)) for pt in sorted_points]
+                    board.area = area
+                    
+                    # 计算对角线交点
+                    board.center = self._calculate_intersection(board.points)
+                    if board.center is not None:
+                        board.is_valid = True
+                        boards.append(board)
+        
+        # 返回面积最大的板子或空 Board 对象
+        if boards:
+            self.board = max(boards, key=lambda b: b.area)
+        else:
+            self.board = Board()
+            
+        return self.board
+
+    def _calculate_intersection(self, points):
+        """
+        使用两点式直线方程求交点公式
+        直线1：点0(左上) -> 点2(右下)
+        直线2：点1(左下) -> 点3(右上)
+        """
+        x1, y1 = points[0]
+        x2, y2 = points[2]
+        x3, y3 = points[1]
+        x4, y4 = points[3]
+
+        # 求解线性方程组的分母
+        denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+
+        # 防止两条对角线平行导致除数为0的异常崩溃
+        if denominator == 0:
+            return None
+
+        # 两点式相交的中心点坐标公式
+        px = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denominator
+        py = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denominator
+
+        return (int(px), int(py))
+
+    def _draw_annotations(self, image):
+        """
+        按照要求在画面上绘制对应的绿色和蓝色线条/点
+        """
+        if not self.board.is_valid:
+            return
+
+        pts = self.board.points
+        
+        # 1. 用绿色的线框住识别出来的矩形: 左上->左下->右下->右上->闭合回左上
+        # OpenCV 的颜色格式是 (B, G, R) -> 绿色为 (0, 255, 0)
+        cv2.line(image, pts[0], pts[1], (0, 255, 0), 2)
+        cv2.line(image, pts[1], pts[2], (0, 255, 0), 2)
+        cv2.line(image, pts[2], pts[3], (0, 255, 0), 2)
+        cv2.line(image, pts[3], pts[0], (0, 255, 0), 2)
+
+        # 2. 蓝色画出对角线 -> 蓝色为 (255, 0, 0)
+        cv2.line(image, pts[0], pts[2], (255, 0, 0), 2)
+        cv2.line(image, pts[1], pts[3], (255, 0, 0), 2)
+
+        # 3. 绿色画出两直线交点 (圆心实心点)
+        if self.board.center:
+            cv2.circle(image, self.board.center, 5, (0, 255, 0), -1)
