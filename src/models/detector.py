@@ -15,7 +15,9 @@ class Detector:
     def __init__(self, min_area=5000, max_area=500000):
         self.board_min_area = min_area
         self.board_max_area = max_area
+        self.threshold_value = 127
         self.board = Board()
+        self.last_binary = None # 新增：用于存储二值化中间图供 main 显示
 
     def process_image(self, frame):
         
@@ -23,8 +25,11 @@ class Detector:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
         # 反二值化 (cv2.THRESH_BINARY_INV)
-        # 考虑到现场光照，建议加上大津法 (THRESH_OTSU) 自动寻找最优阈值
-        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+        # 去掉 THRESH_OTSU，改为手动调值
+        _, binary = cv2.threshold(gray, self.threshold_value, 255, cv2.THRESH_BINARY_INV)
+        
+        # 新增：存储当前帧的二值化结果，供 main.py 显示
+        self.last_binary = binary
 
         # 核心检测逻辑
         self.find_board(binary)
@@ -37,7 +42,9 @@ class Detector:
 
     def find_board(self, binary):
         """
-        轮廓查找与排序逻辑（包含你提供的双重排序法）
+        查找逻辑为内层白色矩形的外轮廓（内轮廓）、外层黑色空心矩形的的外轮廓（外轮廓），两层轮廓作为保险
+        优先查找内轮廓
+        轮廓查找后对于矩形的四点运用两层排序逻辑作为保险
         """
         boards = []
         # 使用 cv2.RETR_CCOMP 以获取内外轮廓的层次结构
@@ -113,8 +120,8 @@ class Detector:
     def _calculate_intersection(self, points):
         """
         使用两点式直线方程求交点公式
-        直线1：点0(左上) -> 点2(右下)
-        直线2：点1(左下) -> 点3(右上)
+        直线1:点0(左上) -> 点2(右下)
+        直线2:点1(左下) -> 点3(右上)
         """
         x1, y1 = points[0]
         x2, y2 = points[2]
@@ -124,7 +131,7 @@ class Detector:
         # 求解线性方程组的分母
         denominator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
 
-        # 防止两条对角线平行导致除数为0的异常崩溃
+        # 防止分母为0，从而导致程序崩溃
         if denominator == 0:
             return None
 
@@ -136,24 +143,24 @@ class Detector:
 
     def _draw_annotations(self, image):
         """
-        按照要求在画面上绘制对应的绿色和蓝色线条/点
+        绿色框框住整体矩形，蓝色画出对角线，绿色画出两直线交点
         """
         if not self.board.is_valid:
             return
 
         pts = self.board.points
         
-        # 1. 用绿色的线框住识别出来的矩形: 左上->左下->右下->右上->闭合回左上
-        # OpenCV 的颜色格式是 (B, G, R) -> 绿色为 (0, 255, 0)
+        # 用绿色的线框住识别出来的矩形: 左上->左下->右下->右上->闭合回左上
+        
         cv2.line(image, pts[0], pts[1], (0, 255, 0), 2)
         cv2.line(image, pts[1], pts[2], (0, 255, 0), 2)
         cv2.line(image, pts[2], pts[3], (0, 255, 0), 2)
         cv2.line(image, pts[3], pts[0], (0, 255, 0), 2)
 
-        # 2. 蓝色画出对角线 -> 蓝色为 (255, 0, 0)
+        # 蓝色画出对角线 
         cv2.line(image, pts[0], pts[2], (255, 0, 0), 2)
         cv2.line(image, pts[1], pts[3], (255, 0, 0), 2)
 
-        # 3. 绿色画出两直线交点 (圆心实心点)
+        # 绿色画出两直线交点 (圆心实心点)
         if self.board.center:
             cv2.circle(image, self.board.center, 5, (0, 255, 0), -1)
