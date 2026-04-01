@@ -6,8 +6,8 @@ class Board:
     def __init__(self):
         self.points = []       # 四个端点坐标，顺序: [左上, 左下, 右下, 右上]
         self.center = None     # 对角线交点坐标 (x, y)
-        self.area = 0.0        # 轮廓面积
-        self.is_valid = False  # 标志位：当前帧是否成功检测到有效靶板
+        self.area = 0.0        
+        self.is_valid = False  # 标志位当前帧是否成功检测到有效靶板
 
 
 class Detector:
@@ -17,26 +17,22 @@ class Detector:
         self.board_max_area = max_area
         self.threshold_value = 127
         self.board = Board()
-        self.last_binary = None # 新增：用于存储二值化中间图供 main 显示
+        self.last_binary = None 
 
     def process_image(self, frame):
         
         # 转灰度
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # 反二值化 (cv2.THRESH_BINARY_INV)
-        # 去掉 THRESH_OTSU，改为手动调值
-        _, binary = cv2.threshold(gray, self.threshold_value, 255, cv2.THRESH_BINARY_INV)
-        
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)     
+        # 反二值化 
+        _, binary = cv2.threshold(gray, self.threshold_value, 255, cv2.THRESH_BINARY_INV)        
         # 新增：存储当前帧的二值化结果，供 main.py 显示
-        self.last_binary = binary
-
+        self.last_binary = binary       # 存储当前帧的二值化结果
         # 核心检测逻辑
         self.find_board(binary)
-
         # 绘制可视化结果
         annotated_frame = frame.copy()
         self._draw_annotations(annotated_frame)
+        self.draw_center_dot(annotated_frame)
 
         return annotated_frame, self.board
 
@@ -47,10 +43,10 @@ class Detector:
         轮廓查找后对于矩形的四点运用两层排序逻辑作为保险
         """
         boards = []
-        # 使用 cv2.RETR_CCOMP 以获取内外轮廓的层次结构
+
         contours, hierarchy = cv2.findContours(binary, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
         
-        # 安全检查：如果画面中没有任何轮廓，hierarchy 将为 None
+        # 安全检查，如果画面中没有任何轮廓，hierarchy 将为 None
         if hierarchy is None:
             self.board = Board()
             return self.board
@@ -58,10 +54,10 @@ class Detector:
         # 首先尝试寻找内轮廓
         inner_contours = []
         for i, contour in enumerate(contours):
-            if hierarchy[0][i][3] != -1:  # 有父轮廓的轮廓（内轮廓）
+            if hierarchy[0][i][3] != -1:  # 有内轮廓
                 inner_contours.append((i, contour))
         
-        # 如果没有内轮廓，则使用外轮廓（无父轮廓的轮廓）
+        # 如果没有内轮廓，则使用外轮廓
         if inner_contours:
             target_contours = inner_contours
         else:
@@ -76,7 +72,7 @@ class Detector:
                 if len(approx) == 4:
                     points = approx.reshape(4, 2)
                     
-                    # 原有排序逻辑 (和差排序)
+                    # 和差排序逻辑
                     sum_xy = points.sum(axis=1)
                     diff_xy = points[:, 0] - points[:, 1]
                     sorted_points = [
@@ -98,7 +94,7 @@ class Detector:
                             points[np.argmax(points[:, 1])]   # 右上：最下面的y坐标
                         ]
                     
-                    # 实例化
+                    # 实例
                     board = Board()
                     board.points = [tuple(map(int, pt)) for pt in sorted_points]
                     board.area = area
@@ -143,6 +139,7 @@ class Detector:
 
     def _draw_annotations(self, image):
         """
+        靶纸绘制逻辑：
         绿色框框住整体矩形，蓝色画出对角线，绿色画出两直线交点
         """
         if not self.board.is_valid:
@@ -151,7 +148,6 @@ class Detector:
         pts = self.board.points
         
         # 用绿色的线框住识别出来的矩形: 左上->左下->右下->右上->闭合回左上
-        
         cv2.line(image, pts[0], pts[1], (0, 255, 0), 2)
         cv2.line(image, pts[1], pts[2], (0, 255, 0), 2)
         cv2.line(image, pts[2], pts[3], (0, 255, 0), 2)
@@ -160,7 +156,13 @@ class Detector:
         # 蓝色画出对角线 
         cv2.line(image, pts[0], pts[2], (255, 0, 0), 2)
         cv2.line(image, pts[1], pts[3], (255, 0, 0), 2)
-
-        # 绿色画出两直线交点 (圆心实心点)
+        
+        # 绿色实心点画出两直线交点
         if self.board.center:
             cv2.circle(image, self.board.center, 5, (0, 255, 0), -1)
+
+    def draw_center_dot(self, image):
+        """绘制相机光轴"""
+        h, w = image.shape[:2]
+        # 橙色 
+        cv2.circle(image, (w // 2, h // 2), 5, (0, 165, 255), -1)
