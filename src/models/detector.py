@@ -166,3 +166,12 @@ class Detector:
         h, w = image.shape[:2]
         # 橙色 
         cv2.circle(image, (w // 2, h // 2), 5, (0, 165, 255), -1)
+
+    def draw_laser_crosshair(self, image, laser_u, laser_v, size=15):
+        """ 画出激光笔的紫色十字瞄准点"""
+        color = (128, 0, 128) 
+        thickness = 2
+        # 画竖线
+        cv2.line(image, (laser_u, laser_v - size), (laser_u, laser_v + size), color, thickness)
+        # 画横线
+        cv2.line(image, (laser_u - size, laser_v), (laser_u + size, laser_v), color, thickness)
