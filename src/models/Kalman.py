@@ -49,7 +49,7 @@ class KalmanFilter:
     def update(self, measurement):
         measure = np.array([[np.float32(measurement)]])
         estimate = self.kf.correct(measure)
-        return estimate[0, 0] , estimate[1, 0] # 返回修正后的最优位置值
+        return estimate[0, 0], estimate[1, 0] # 返回修正后的最优位置值
 
     def reset(self):
         # 状态置零，初始化
