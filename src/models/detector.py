@@ -7,8 +7,6 @@ class Board:
         self.points = []       # 四个端点坐标，顺序: [左上, 左下, 右下, 右上]
         self.center = None     # 对角线交点坐标 (x, y)
         self.area = 0.0        
-        self.is_valid = False  # 标志位当前帧是否成功检测到有效靶板
-
 
 class Detector:
     
@@ -16,26 +14,20 @@ class Detector:
         self.board_min_area = min_area
         self.board_max_area = max_area
         self.threshold_value = 127
-        self.board = Board()
-        self.last_binary = None 
+        self.boards = []
+        self.raw = None
+        self.binary = None 
 
     def process_image(self, frame):
-        
+        self.raw = frame
         # 转灰度
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)     
-        # 反二值化 
+        # 反二值化
         _, binary = cv2.threshold(gray, self.threshold_value, 255, cv2.THRESH_BINARY_INV)        
         # 新增：存储当前帧的二值化结果，供 main.py 显示
-        self.last_binary = binary       # 存储当前帧的二值化结果
-        # 核心检测逻辑
-        self.find_board(binary)
-        # 绘制可视化结果
-        annotated_frame = frame.copy()
-        self._draw_annotations(annotated_frame)
-        self.draw_center_dot(annotated_frame)
-
-        return annotated_frame, self.board
-
+        self.binary = binary       # 存储当前帧的二值化结果
+        return binary
+        
     def find_board(self, binary):
         """
         查找逻辑为内层白色矩形的外轮廓（内轮廓）、外层黑色空心矩形的的外轮廓（外轮廓），两层轮廓作为保险
@@ -48,8 +40,8 @@ class Detector:
         
         # 安全检查，如果画面中没有任何轮廓，hierarchy 将为 None
         if hierarchy is None:
-            self.board = Board()
-            return self.board
+            self.boards = []
+            return []
 
         # 首先尝试寻找内轮廓
         inner_contours = []
@@ -102,16 +94,16 @@ class Detector:
                     # 计算对角线交点
                     board.center = self._calculate_intersection(board.points)
                     if board.center is not None:
-                        board.is_valid = True
                         boards.append(board)
         
-        # 返回面积最大的板子或空 Board 对象
         if boards:
-            self.board = max(boards, key=lambda b: b.area)
+            # 按面积从大到小排序 
+            boards.sort(key=lambda b: b.area, reverse=True)
+            self.boards = boards
         else:
-            self.board = Board()
-            
-        return self.board
+            self.boards = []
+
+        return boards
 
     def _calculate_intersection(self, points):
         """
@@ -142,10 +134,14 @@ class Detector:
         靶纸绘制逻辑：
         绿色框框住整体矩形，蓝色画出对角线，绿色画出两直线交点
         """
-        if not self.board.is_valid:
+        if not self.boards:
             return
-
-        pts = self.board.points
+            
+        board = self.boards[0]  # 永远取排序后的第一个
+        if not board.points or board.center is None:
+            return
+        
+        pts = board.points
         
         # 用绿色的线框住识别出来的矩形: 左上->左下->右下->右上->闭合回左上
         cv2.line(image, pts[0], pts[1], (0, 255, 0), 2)
@@ -158,8 +154,8 @@ class Detector:
         cv2.line(image, pts[1], pts[3], (255, 0, 0), 2)
         
         # 绿色实心点画出两直线交点
-        if self.board.center:
-            cv2.circle(image, self.board.center, 5, (0, 255, 0), -1)
+        if board.center:
+            cv2.circle(image, board.center, 5, (0, 255, 0), -1)
 
     def draw_center_dot(self, image):
         """绘制相机光轴"""
@@ -175,3 +171,55 @@ class Detector:
         cv2.line(image, (laser_u, laser_v - size), (laser_u, laser_v + size), color, thickness)
         # 画横线
         cv2.line(image, (laser_u - size, laser_v), (laser_u + size, laser_v), color, thickness)
+
+    def draw_info(self, image, fps=None, info_text=None):
+        """在传入的图像副本上绘制 FPS 与状态信息"""
+        if image is None:
+            return image
+            
+        if fps is not None:
+            cv2.putText(image, f"FPS: {fps:.1f}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                        
+        if info_text:
+            cv2.putText(image, info_text, (10, 70),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        return image
+    
+    def draw(self, image, laser_pos=None, fps=None, info_text=None):
+        if image is None:
+            return image
+
+        # 绘制靶纸识别框、对角线、交点
+        self._draw_annotations(image)
+        # 绘制相机光轴
+        self.draw_center_dot(image)
+        # 绘制激光十字瞄准点
+        if laser_pos is not None:
+            self.draw_laser_crosshair(image, laser_pos[0], laser_pos[1])
+        # 绘制 FPS 与状态文本
+        self.draw_info(image, fps, info_text)
+        return image
+
+    def detect(self, frame):
+        """对外接口，直接返回检测结果"""
+        target = None
+        # 核心检测逻辑
+        bin = self.process_image(frame)
+        boards = self.find_board(bin)
+        return boards[0] if boards else None
+    
+    def display(self, dis, fps=None, info_text=None, laser_pos=None, show_binary=True):
+        """对外接口，直接返回带有检测结果标注的图像"""
+        # 绘制可视化结果
+        bin, res = None, None
+        # 防止首帧 self.raw 为 None 导致 .copy() 崩溃
+        if self.raw is None:
+            return None, self.binary
+        # 避免修改原图数据
+        vis = self.raw.copy()
+        if dis == 1:
+            res = self.draw(vis, laser_pos, fps, info_text)
+            bin = self.binary
+        return res, bin
+        
