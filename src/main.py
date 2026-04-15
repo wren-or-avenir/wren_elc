@@ -1,10 +1,12 @@
 import cv2
 import time
 from models.detector import Detector
-from models.tracker import Tracker
+from models.tracker import Tracker, Status
+
+# 初始化模块
 detector = Detector(min_area=5000, max_area=500000)
-tracker = Tracker(f_pixel_h=725.6, real_height=17.5)
-camera_index = 0    # 相机索引
+tracker = Tracker(f_pixel_h=725.6, real_height=17.5, use_kf=True) # 默认开启卡尔曼
+camera_index = 4   # 相机索引
 
 # 用于记录上一次的阈值，实现去重打印
 last_thresh = -1
@@ -36,10 +38,10 @@ def update_params():
         last_thresh = current_thresh
 
 def main():
-    print("正在启动视觉系统... 按 'q' 键退出。")
+    print("视觉跟踪系统启动... 按 'q' 键退出。")
     init_board()
 
-    # 使用 V4L2 后端打开摄像头
+    # 使用 V4L2 后端打开摄像头（Linux 下推荐）
     cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
     if not cap.isOpened():
         print(f"错误: 无法打开摄像头 {camera_index}")
@@ -55,31 +57,39 @@ def main():
         if not ret:
             break
 
-        # 执行参数回调与打印逻辑
         update_params()
-        # 目标检测，及绘制结果
-        annotated_frame, board = detector.process_image(frame)
-        # 角度解算
-        if board.is_valid:
-            res = tracker.solve(board)
-            if res:
-                yaw, pitch, dist = res
-                info = f"Yaw:{yaw:.2f} Pitch:{pitch:.2f} Dis:{dist:.1f}cm"
-                cv2.putText(annotated_frame, info, (10, 70), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-
-        # 计算 FPS
+        
+        # 目标检测：返回 Board 对象或 None
+        target = detector.detect(frame)
+        
+        # 滤波跟踪与解算：统一入口，返回 5 元组 (yaw, pitch, dist, status, laser_pos)
+        yaw, pitch, dist, status, laser_pos = tracker.track(target)
+        
+        # 计算整个主循环的 FPS
         curr_time = time.time()
-        fps = 1 / (curr_time - prev_time)
+        fps = 1.0 / max(curr_time - prev_time, 1e-6)  # 防除零保护
         prev_time = curr_time
-        cv2.putText(annotated_frame, f"FPS: {fps:.1f}", (10, 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-
+        
+        # 格式化显示文本（根据状态自动切换）
+        if status == Status.TRACK:
+            info = f"[TRACK] Yaw:{yaw:.2f}° Pitch:{pitch:.2f}° Dist:{dist:.1f}cm"
+        elif status == Status.TMP_LOST:
+            info = f"[PREDICT] 惯性预测中... Dist:{dist:.1f}cm"
+        else:
+            info = "[LOST] 搜索目标中..."
+            
+        # 统一渲染：在副本上绘制，绝不污染原始帧
+        vis_frame, mask = detector.display(
+            dis=1, fps=fps, info_text=info, laser_pos=laser_pos, show_binary=True
+        )
+        
         # 窗口显示
-        cv2.imshow("Mask", detector.last_binary)
-        cv2.imshow("Result", annotated_frame)
+        if vis_frame is not None:
+            cv2.imshow("Result", vis_frame)
+        if mask is not None:
+            cv2.imshow("Mask", mask)
 
-        # 退出按q
+        # 退出控制
         if cv2.waitKey(1) & 0xFF == ord('q'):
             print("\n" + "="*30)
             print(f"程序退出。最终确认阈值 Threshold: {detector.threshold_value}")
