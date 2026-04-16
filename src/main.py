@@ -72,13 +72,13 @@ def main():
         
         # 格式化显示文本（根据状态自动切换）
         if status == Status.TRACK:
-            info = f"[TRACK] Yaw:{yaw:.2f}° Pitch:{pitch:.2f}° Dist:{dist:.1f}cm"
+            info = f"[TRACK] Yaw:{yaw:.2f} Pitch:{pitch:.2f} Dist:{dist:.1f}cm"
         elif status == Status.TMP_LOST:
-            info = f"[PREDICT] 惯性预测中... Dist:{dist:.1f}cm"
+            info = f"[PREDICT]Predicting...  Dist:{dist:.1f}cm"
         else:
-            info = "[LOST] 搜索目标中..."
+            info = "[LOST]Searching... "
             
-        # 统一渲染：在副本上绘制，绝不污染原始帧
+        #   在副本上绘制，绝不污染原始帧
         vis_frame, mask = detector.display(
             dis=1, fps=fps, info_text=info, laser_pos=laser_pos, show_binary=True
         )
