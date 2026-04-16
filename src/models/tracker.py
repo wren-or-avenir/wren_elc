@@ -20,8 +20,8 @@ class Tracker:
         self.real_height = real_height # 目标物理高度 (cm)
         
         self.use_kf = use_kf    # 是否启用卡尔曼滤波器
-        self.kf_cx = KalmanFilter(q_scale=0.01, r_scale=0.1)    # cx 卡尔曼滤波器
-        self.kf_cy = KalmanFilter(q_scale=0.01, r_scale=0.1)    # cy 卡尔曼滤波器
+        self.kf_cx = KalmanFilter(q_scale=0.35, r_scale=0.1)    # cx 卡尔曼滤波器
+        self.kf_cy = KalmanFilter(q_scale=0.35, r_scale=0.1)    # cy 卡尔曼滤波器
         self.kf_dist = KalmanFilter(q_scale=0.01, r_scale=2.0)  # distance 卡尔曼滤波器
 
         self.lost_count = 0  # 丢帧数
@@ -46,10 +46,10 @@ class Tracker:
     def get_dist(self, board):
         # 计算距离
         pts = board.points
-        # h_left = math.sqrt((pts[0][0]-pts[1][0])**2 + (pts[0][1]-pts[1][1])**2)
-        # h_right = math.sqrt((pts[3][0]-pts[2][0])**2 + (pts[3][1]-pts[2][1])**2)
-        h_left = math.sqrt((pts[0][0]-pts[3][0])**2 + (pts[0][1]-pts[3][1])**2)
-        h_right = math.sqrt((pts[1][0]-pts[2][0])**2 + (pts[1][1]-pts[2][1])**2)
+        h_left = math.sqrt((pts[0][0]-pts[1][0])**2 + (pts[0][1]-pts[1][1])**2)
+        h_right = math.sqrt((pts[3][0]-pts[2][0])**2 + (pts[3][1]-pts[2][1])**2)
+        # h_left = math.sqrt((pts[0][0]-pts[3][0])**2 + (pts[0][1]-pts[3][1])**2)
+        # h_right = math.sqrt((pts[1][0]-pts[2][0])**2 + (pts[1][1]-pts[2][1])**2)
         avg_h_px = (h_left + h_right) / 2.0
         # 除零保护
         if avg_h_px < 1: 
@@ -68,7 +68,7 @@ class Tracker:
         dt = self.time_diff()
 
         if self.use_kf:
-            if target is not None:
+            if target is not None and target.center is not None:
                 # 丢帧计数重置
                 self.lost_count = 0
                 if self.status == Status.LOST:
@@ -144,7 +144,7 @@ class Tracker:
     
     def track(self, board):
         """对外接口，追踪主逻辑"""
-        if board is not None:
+        if board is not None and board.center is not None:
             filtered_center, filtered_dist = self.filter(board)
             if self.status != Status.LOST:
                 yaw, pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
@@ -152,4 +152,5 @@ class Tracker:
             else:
                 return 0.0, 0.0, 0.0, self.status, None
         else:
+            self.filter(None)
             return 0.0, 0.0, 0.0, self.status, None
