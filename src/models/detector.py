@@ -22,9 +22,8 @@ class Detector:
         self.raw = frame
         # 转灰度
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)     
-        # 反二值化
-        _, binary = cv2.threshold(gray, self.threshold_value, 255, cv2.THRESH_BINARY_INV)        
-        # 新增：存储当前帧的二值化结果，供 main.py 显示
+        # 反二值化,大津法自适应阈值
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)        
         self.binary = binary       # 存储当前帧的二值化结果
         return binary
         
@@ -183,7 +182,7 @@ class Detector:
                         
         if info_text:
             cv2.putText(image, info_text, (10, 70),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
         return image
     
     def draw(self, image, laser_pos=None, fps=None, info_text=None):
