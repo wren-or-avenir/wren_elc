@@ -3,6 +3,7 @@ import numpy as np
 from .Kalman import KalmanFilter
 import time
 from enum import IntEnum
+from .dm_imu import imu 
 
 # 追踪状态展示
 class Status(IntEnum):
@@ -148,6 +149,7 @@ class Tracker:
             filtered_center, filtered_dist = self.filter(board)
             if self.status != Status.LOST:
                 yaw, pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
+                yaw, pitch = imu.get_abs(yaw, pitch)
                 return yaw, pitch, dist, self.status, laser_pos
             else:
                 return 0.0, 0.0, 0.0, self.status, None
