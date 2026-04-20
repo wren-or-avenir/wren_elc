@@ -8,7 +8,6 @@ from models.dm_imu import IMU
 detector = Detector(min_area=5000, max_area=500000)
 tracker = Tracker(f_pixel_h=725.6, real_height=17.5, use_kf=True) # 默认开启卡尔曼
 camera_index = 4   # 相机索引
-imu = IMU(port='/dev/ttyACM0')  # 串口号按 RDKX5 实际值替换，如 /dev/ttyUSB0
 
 # 用于记录上一次的阈值，实现去重打印
 last_thresh = -1
