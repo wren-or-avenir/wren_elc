@@ -1,5 +1,4 @@
 from .dm_serial import DM_Serial
-
 class IMU:
     def __init__(self, port, baud = 921600):
         self.dev = DM_Serial(port, baud)
@@ -26,3 +25,5 @@ class IMU:
         """ 对外接口,返回绝对云台角度(yaw, pitch) """
         abs_yaw, abs_pitch = self.solve_abs(vis_yaw, vis_pitch)
         return abs_yaw, abs_pitch
+    
+imu = IMU(port='/dev/ttyACM0')
