@@ -30,4 +30,4 @@ class IMU:
         abs_yaw, abs_pitch = self.solve_abs(vis_yaw, vis_pitch)
         return abs_yaw, abs_pitch
     
-imu = IMU(port='/dev/ttyACM0')  # 替换为你的实际串口号
+imu = IMU(port='/dev/ttyACM0')  # 替换为实际的串口号
