@@ -28,6 +28,9 @@ class Tracker:
         self.lost_count = 0  # 丢帧数
         self.frame_lost_tol = 8   # 丢帧容忍度 
         self.last_time = None
+
+        self.onfire = False # 开火状态，默认为关闭
+        self.onfire_tol = 3 # 开火容忍，单位为度
         # 物理偏移补偿 (单位: cm)
         self.ref_point = np.array([0.0, 1.4, 0.0])      # 测量得出激光笔位于相机光轴上方1.4cm,视差补偿为 np.array([0.0, 1.4, 0.0])
         self.status = Status.LOST # 初始状态为 LOST
@@ -143,13 +146,23 @@ class Tracker:
 
         return yaw, pitch, dist, (int(laser_u), int(laser_v))
     
+    def check_onfire(self, pitch, yaw):
+        arrived = False
+        if abs(pitch) < self.onfire_tol and abs(yaw) < self.onfire_tol:
+            arrived = True
+        else:
+            arrived = False
+        return arrived
+       
+        
     def track(self, board):
         """对外接口，追踪主逻辑"""
         if board is not None and board.center is not None:
             filtered_center, filtered_dist = self.filter(board)
             if self.status != Status.LOST:
-                yaw, pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
-                yaw, pitch = imu.get_abs(yaw, pitch)
+                rel_yaw, rel_pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
+                self.onfire = self.check_onfire(rel_pitch, rel_yaw)
+                yaw, pitch = imu.get_abs(rel_yaw, rel_pitch)
                 return yaw, pitch, dist, self.status, laser_pos
             else:
                 return 0.0, 0.0, 0.0, self.status, None
