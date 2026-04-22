@@ -162,30 +162,7 @@ class Detector:
         # 橙色 
         cv2.circle(image, (w // 2, h // 2), 5, (0, 165, 255), -1)
 
-    def draw_laser_crosshair(self, image, laser_u, laser_v, size=15):
-        """ 画出激光笔的紫色十字瞄准点"""
-        color = (128, 0, 128) 
-        thickness = 2
-        # 画竖线
-        cv2.line(image, (laser_u, laser_v - size), (laser_u, laser_v + size), color, thickness)
-        # 画横线
-        cv2.line(image, (laser_u - size, laser_v), (laser_u + size, laser_v), color, thickness)
-
-    def draw_info(self, image, fps=None, info_text=None):
-        """在传入的图像副本上绘制 FPS 与状态信息"""
-        if image is None:
-            return image
-            
-        if fps is not None:
-            cv2.putText(image, f"FPS: {fps:.1f}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-                        
-        if info_text:
-            cv2.putText(image, info_text, (10, 70),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-        return image
-    
-    def draw(self, image, laser_pos=None, fps=None, info_text=None):
+    def draw(self, image):
         if image is None:
             return image
 
@@ -193,11 +170,7 @@ class Detector:
         self._draw_annotations(image)
         # 绘制相机光轴
         self.draw_center_dot(image)
-        # 绘制激光十字瞄准点
-        if laser_pos is not None:
-            self.draw_laser_crosshair(image, laser_pos[0], laser_pos[1])
-        # 绘制 FPS 与状态文本
-        self.draw_info(image, fps, info_text)
+        
         return image
 
     def detect(self, frame):
@@ -208,8 +181,8 @@ class Detector:
         boards = self.find_board(bin)
         return boards[0] if boards else None
     
-    def display(self, dis, fps=None, info_text=None, laser_pos=None, show_binary=True):
-        """对外接口，直接返回带有检测结果标注的图像"""
+    def display(self, dis):
+        """对外接口,直接返回detector的图像"""
         # 绘制可视化结果
         bin, res = None, None
         # 防止首帧 self.raw 为 None 导致 .copy() 崩溃
@@ -218,7 +191,7 @@ class Detector:
         # 避免修改原图数据
         vis = self.raw.copy()
         if dis == 1:
-            res = self.draw(vis, laser_pos, fps, info_text)
+            res = self.draw(vis)
             bin = self.binary
         return res, bin
         

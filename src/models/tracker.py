@@ -4,6 +4,7 @@ from .Kalman import KalmanFilter
 import time
 from enum import IntEnum
 from .dm_imu import imu 
+import cv2
 
 # 追踪状态展示
 class Status(IntEnum):
@@ -31,6 +32,8 @@ class Tracker:
 
         self.onfire = False # 开火状态，默认为关闭
         self.onfire_tol = 3 # 开火容忍，单位为度
+
+        self.raw = None
         # 物理偏移补偿 (单位: cm)
         self.ref_point = np.array([0.0, 1.4, 0.0])      # 测量得出激光笔位于相机光轴上方1.4cm,视差补偿为 np.array([0.0, 1.4, 0.0])
         self.status = Status.LOST # 初始状态为 LOST
@@ -154,7 +157,6 @@ class Tracker:
             arrived = False
         return arrived
        
-        
     def track(self, board):
         """对外接口，追踪主逻辑"""
         if board is not None and board.center is not None:
@@ -163,9 +165,29 @@ class Tracker:
                 rel_yaw, rel_pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
                 self.onfire = self.check_onfire(rel_pitch, rel_yaw)
                 yaw, pitch = imu.get_abs(rel_yaw, rel_pitch)
+                self.laser_pos = laser_pos
                 return yaw, pitch, dist, self.status, laser_pos
             else:
+                self.laser_pos = None
                 return 0.0, 0.0, 0.0, self.status, None
         else:
             self.filter(None)
+            self.laser_pos = None
             return 0.0, 0.0, 0.0, self.status, None
+        
+    def display(self, dis=1, laser_pos=None):
+        """对外接口，展示滤波后的结果"""
+        if self.raw is None:
+            return None
+        vis = self.raw.copy()
+        if dis == 1 and laser_pos is not None:
+            
+            h, w = vis.shape[:2]
+            cv2.circle(vis, (w // 2, h // 2), 5, (0, 165, 255), -1)
+
+            cx, cy = laser_pos
+            color = (255, 0, 255)
+            cv2.line(vis, (cx - 10, cy), (cx + 10, cy), color, 2)
+            cv2.line(vis, (cx, cy - 10), (cx, cy + 10), color, 2)
+            cv2.circle(vis, (cx, cy), 3, color, -1)
+        return vis
