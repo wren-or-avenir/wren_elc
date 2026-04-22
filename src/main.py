@@ -19,8 +19,8 @@ def init_board():
     """初始化调试窗口和滑动条"""
     cv2.namedWindow('Controls', cv2.WINDOW_NORMAL)
     cv2.resizeWindow('Controls', 300, 150)
-    cv2.namedWindow('Result', cv2.WINDOW_FREERATIO)
-    cv2.namedWindow('Mask', cv2.WINDOW_FREERATIO)
+    cv2.namedWindow('DETECTOR', cv2.WINDOW_FREERATIO)  
+    cv2.namedWindow('BIN', cv2.WINDOW_FREERATIO)      
     cv2.createTrackbar('Threshold', 'Controls', 127, 255, nothing)
 
 def update_params():
@@ -42,7 +42,6 @@ def main():
     print("视觉跟踪系统启动... 按 'q' 键退出。")
     init_board()
 
-    # 使用 V4L2 后端打开摄像头（Linux 下推荐）
     cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
     if not cap.isOpened():
         print(f"错误: 无法打开摄像头 {camera_index}")
@@ -60,40 +59,48 @@ def main():
 
         update_params()
         
-        # 目标检测：返回 Board 对象或 None
+        # 目标检测
         target = detector.detect(frame)
         
-        # 滤波跟踪与解算：统一入口，返回 5 元组 (yaw, pitch, dist, status, laser_pos)
+        # 滤波跟踪与解算
         yaw, pitch, dist, status, laser_pos = tracker.track(target)
         
-        # 计算整个主循环的 FPS
+        # 计算 FPS（终端打印）
         curr_time = time.time()
-        fps = 1.0 / max(curr_time - prev_time, 1e-6)  # 防除零保护
+        fps = 1.0 / max(curr_time - prev_time, 1e-6)
         prev_time = curr_time
         
-        # 格式化显示文本（根据状态自动切换）
+        # 格式化状态文本（终端打印）
         if status == Status.TRACK:
             info = f"[TRACK] Yaw:{yaw:.2f} Pitch:{pitch:.2f} Dist:{dist:.1f}cm"
         elif status == Status.TMP_LOST:
-            info = f"[PREDICT]Predicting...  Dist:{dist:.1f}cm"
+            info = f"[PREDICT] Predicting... Dist:{dist:.1f}cm"
         else:
-            info = "[LOST]Searching... "
-            
-        #   在副本上绘制，绝不污染原始帧
-        vis_frame, mask = detector.display(
-            dis=1, fps=fps, info_text=info, laser_pos=laser_pos, show_binary=True
-        )
+            info = "[LOST] Searching..."
+        
+        # 终端打印 FPS + 状态（每帧输出）
+        print(f"FPS: {fps:.1f} | {info}")
+        
+        # 同步 raw 帧（供 display 使用）
+        detector.raw = frame
+        tracker.raw = frame
+        
+        # 获取绘制结果
+        vis_det, bin_img = detector.display(dis=1)
+        vis_trk = tracker.display(dis=1, laser_pos=laser_pos)
         
         # 窗口显示
-        if vis_frame is not None:
-            cv2.imshow("Result", vis_frame)
-        if mask is not None:
-            cv2.imshow("Mask", mask)
+        if vis_det is not None:
+            cv2.imshow("DETECTOR", vis_det)
+        if bin_img is not None:
+            cv2.imshow("BIN", bin_img)
+        if vis_trk is not None:
+            cv2.imshow("Tracker", vis_trk)
 
         # 退出控制
         if cv2.waitKey(1) & 0xFF == ord('q'):
             print("\n" + "="*30)
-            print(f"程序退出。最终确认阈值 Threshold: {detector.threshold_value}")
+            print(f"程序退出。最终阈值 Threshold: {detector.threshold_value}")
             print("="*30)
             break
 
