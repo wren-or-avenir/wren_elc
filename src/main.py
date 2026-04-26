@@ -1,13 +1,20 @@
 import cv2
 import time
+from models.cam import Camera
 from models.detector import Detector
 from models.tracker import Tracker, Status
-from models.dm_imu import IMU
+from models.stepper import Stepper
+# from Hobot.GPIO import GPIO
+# from model.status import GPIN
+# from models.dm_imu import IMU
+
 
 # 初始化模块
+camera_index = 4   # 相机索引
+camera = Camera(index=4, width=640, height=480)
 detector = Detector(min_area=5000, max_area=500000)
 tracker = Tracker(f_pixel_h=725.6, real_height=17.5, use_kf=True) # 默认开启卡尔曼
-camera_index = 4   # 相机索引
+
 
 # 用于记录上一次的阈值，实现去重打印
 last_thresh = -1
@@ -42,13 +49,11 @@ def main():
     print("视觉跟踪系统启动... 按 'q' 键退出。")
     init_board()
 
-    cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
-    if not cap.isOpened():
-        print(f"错误: 无法打开摄像头 {camera_index}")
+    try:
+        cam = Camera(camera_index, 640, 480)
+    except RuntimeError as e:
+        print(e)
         return
-
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
     
     prev_time = time.time()
 
