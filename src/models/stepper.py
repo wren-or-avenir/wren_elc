@@ -1,4 +1,3 @@
-#电机控制模块
 import serial
 import enum
 import time
