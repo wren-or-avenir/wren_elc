@@ -5,14 +5,14 @@ from models.detector import Detector
 from models.tracker import Tracker, Status
 from models.stepper import SysParams, EmmMotor
 from models.pid import PIDController
-# from Hobot.GPIO import GPIO
-# from models.status import GPIN
+import Hobot.GPIO as GPIO
+from models.status import GPIN
 # from models.dm_imu import IMU
 
 # ---------放在最前面：特别注意的接口和开关----------
-camera_index = 4        # 摄像头索引，需根据实际情况调整
-yaw_port = 'COM20'      # 偏航电机串口
-pitch_port = 'COM7'     # 俯仰电机串口
+camera_index = 0        # 摄像头索引，需根据实际情况调整
+yaw_port = '/dev/ttyACM0'      # 偏航电机串口
+pitch_port = '/dev/ttyACM1'     # 俯仰电机串口
 
 use_kf = True           # 是否启用卡尔曼滤波
 show_windows = True     # 是否显示调试窗口
@@ -27,8 +27,8 @@ stepper_yaw = EmmMotor(port = yaw_port, baudrate = 115200, timeout = 1, motor_id
 stepper_pitch = EmmMotor(port = pitch_port, baudrate = 115200, timeout = 1, motor_id = 2)
 pid_yaw = PIDController(Kp = 5, Ki = 5, Kd = 5, dt = 1/30)
 pid_pitch = PIDController(Kp = 5, Ki = 5, Kd = 5, dt = 1/30)
-# lazer = GPIN.GPIN(pin=16, mode=1) #激光笔控制
-# heart_beat = GPIN.GPIN(pin=13, mode=1) #呼吸灯，用于表示主程序还在跑
+lazer = GPIN(pin=16, mode=1) #激光笔控制
+heart_beat = GPIN(pin=18, mode=1) #呼吸灯，用于表示主程序还在跑
 # -------------------------------------------------------------------------------
 
 def nothing(x):
@@ -86,7 +86,7 @@ def main():
         while True:
 
             # 呼吸灯，证明主程序在运行(单线程中闪烁频率完全受制于主循环的运行速度)
-            # heart_beat.flash()
+            heart_beat.flash()
 
             # 读帧
             ret, frame = camera.read()
@@ -108,10 +108,10 @@ def main():
             prev_time = curr_time
 
             # 激光开火判断
-            # if not tracker.onfire:
-            #      lazer.set_value(0)
-            # else:
-            #     lazer.set_value(1)
+            if not tracker.onfire:
+                lazer.set_value(0)
+            else:
+                lazer.set_value(1)
             
             # 格式化状态文本
             if status == Status.TRACK:
@@ -184,8 +184,8 @@ def main():
         except Exception as e:
             print(f" 电机关闭异常: {e}")
         cv2.destroyAllWindows()
-        # lazer.cleanup()
-        # heart_beat.cleanup()
+        lazer.cleanup()
+        heart_beat.cleanup()
         print(" 系统已安全关闭")
 
 if __name__ == '__main__':

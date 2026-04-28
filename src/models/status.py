@@ -13,10 +13,12 @@ class GPIN:
         # 主线程心跳检测
         self.last_heartbeat = time.time()
         self.timeout = 3.0  # 3秒超时熔断
-        # 呼吸灯状态机
-        self.duty = 0
-        self.step = 2
-        self._counter = 0
+        
+        # 呼吸灯状态机（改为时间驱动，固定3秒周期，移除原step/_counter）
+        self._breath_start = 0  # 呼吸周期起始时间戳
+        self._pwm_cnt = 0       # PWM输出细分计数器
+        self.duty = 0           # 当前目标占空比 (0~100)
+
         # 严格模式隔离配置
         if self.mode == 1:
             GPIO.setup(self.pin, GPIO.OUT, initial=GPIO.LOW)
@@ -53,27 +55,26 @@ class GPIN:
         # 超时熔断：主线程卡死>3秒，强制拉低灭灯
         if time.time() - self.last_heartbeat > self.timeout:
             GPIO.output(self.pin, GPIO.LOW)
-            self.duty = 0
-            self.step = 2
-            self._counter = 0
+            self._breath_start = 0  # 重置起点，等待下次恢复
             return
 
-        # PWM步进：10次调用为1个周期，高电平次数由占空比决定
-        self._counter = (self._counter + 1) % 10
-        high_ticks = int(self.duty / 10)
-        GPIO.output(self.pin, GPIO.HIGH if self._counter < high_ticks else GPIO.LOW)
+        # 记录呼吸周期起点（首次调用或熔断后重置）
+        if self._breath_start == 0:
+            self._breath_start = time.time()
 
-        # 亮度渐变：每完成1个周期调整一次占空比
-        if self._counter == 0:
-            self.duty += self.step
-            if self.duty >= 100:
-                self.duty = 100
-                self.step = -2
-            elif self.duty <= 0:
-                self.duty = 0
-                self.step = 2
+        # 固定3秒一个完整周期 (0->100->0)，相位计算完全不受主循环FPS影响
+        elapsed = time.time() - self._breath_start
+        phase = (elapsed % 3.0) / 3.0  # 归一化到 0.0 ~ 1.0
+        
+        # 三角波计算：前1.5秒占空比线性上升，后1.5秒线性下降
+        self.duty = int(phase * 200) if phase < 0.5 else int((1.0 - phase) * 200)
+
+        # 软件PWM输出：每调用一次刷新一次电平，主循环越快视觉越平滑
+        self._pwm_cnt = (self._pwm_cnt + 1) % 100
+        GPIO.output(self.pin, GPIO.HIGH if self._pwm_cnt < self.duty else GPIO.LOW)
 
     def cleanup(self):
         # 安全释放，避免残留高电平
-        GPIO.output(self.pin, GPIO.LOW)
+        try: GPIO.output(self.pin, GPIO.LOW)
+        except RuntimeError: pass
         GPIO.cleanup()

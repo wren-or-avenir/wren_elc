@@ -31,7 +31,7 @@ class Tracker:
         self.last_time = None
 
         self.onfire = False # 开火状态，默认为关闭
-        self.onfire_tol = 3 # 开火容忍，单位为度
+        self.onfire_tol = 0.8 # 开火容忍，单位为度
 
         self.raw = None
         # 物理偏移补偿 (单位: cm)
