@@ -6,7 +6,7 @@ from models.tracker import Tracker, Status
 from models.stepper import SysParams, EmmMotor
 from models.pid import PIDController
 # from Hobot.GPIO import GPIO
-# from model.status import GPIN
+# from models.status import GPIN
 # from models.dm_imu import IMU
 
 # ---------放在最前面：特别注意的接口和开关----------
@@ -16,9 +16,9 @@ pitch_port = 'COM7'     # 俯仰电机串口
 
 use_kf = True           # 是否启用卡尔曼滤波
 show_windows = True     # 是否显示调试窗口
-# ----------------------------------------------
+# ------------------------------------------------------------------------------
 
-# -----------------模块初始化----------------------------------------------------
+# -----------------模块初始化--------------------
 camera = Camera(index = camera_index, width = 640, height = 480)
 detector = Detector(min_area = 5000, max_area = 500000)
 tracker = Tracker(f_pixel_h = 725.6, real_height = 17.5, use_kf = use_kf) 
@@ -184,6 +184,8 @@ def main():
         except Exception as e:
             print(f" 电机关闭异常: {e}")
         cv2.destroyAllWindows()
+        # lazer.cleanup()
+        # heart_beat.cleanup()
         print(" 系统已安全关闭")
 
 if __name__ == '__main__':
