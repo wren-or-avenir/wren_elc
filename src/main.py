@@ -11,8 +11,8 @@ from models.status import GPIN
 
 # ---------放在最前面：特别注意的接口和开关----------
 camera_index = 0        # 摄像头索引，需根据实际情况调整
-yaw_port = '/dev/ttyACM0'      # 偏航电机串口
-pitch_port = '/dev/ttyACM1'     # 俯仰电机串口
+yaw_port = '/dev/ttyACM0'      # yaw轴电机串口
+pitch_port = '/dev/ttyACM1'     # pitch轴电机串口
 
 use_kf = True           # 是否启用卡尔曼滤波
 show_windows = True     # 是否显示调试窗口
