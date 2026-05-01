@@ -34,9 +34,14 @@ class Tracker:
         self.onfire_tol = 0.8 # 开火容忍，单位为度
 
         self.raw = None
-        # 物理偏移补偿 (单位: cm)
-        self.ref_point = np.array([0.0, 1.4, 0.0])      # 测量得出激光笔位于相机光轴上方1.4cm,视差补偿为 np.array([0.0, 1.4, 0.0])
+
         self.status = Status.LOST # 初始状态为 LOST
+
+        # 激光笔安装视差 (单位: cm)
+        self.ref_point = np.array([-0.15, 1.35, 0.0])      # 测量得出激光笔位于相机光轴上方1.4cm,视差补偿为 np.array([0.0, 1.4, 0.0])
+        # 激光笔发射角度和相机光轴角度偏差补偿 (单位: 度)，通过实测调整得到
+        self.yaw_bias = -2.3
+        self.pitch_bias = -0.2
 
     def time_diff(self):
         # 起到一个动态dt的作用
@@ -135,8 +140,8 @@ class Tracker:
         offset_y = v - self.img_height / 2
 
         # 考虑视差补偿,目前视差补偿为0，后续如果装激光笔了再调整
-        dx = offset_x - (self.ref_point[0] * self.f_pixel_h / dist if dist != 0 else 0)
-        dy = offset_y - (self.ref_point[1] * self.f_pixel_h / dist if dist != 0 else 0)
+        dx = offset_x + (self.ref_point[0] * self.f_pixel_h / dist if dist != 0 else 0)
+        dy = offset_y + (self.ref_point[1] * self.f_pixel_h / dist if dist != 0 else 0)
 
         # 激光坐标
         laser_u = self.img_width / 2 + dx
@@ -146,6 +151,10 @@ class Tracker:
         yaw = -math.degrees(math.atan2(dx, self.f_pixel_h))
         # Pitch: 向下为正
         pitch = math.degrees(math.atan2(dy, self.f_pixel_h))
+
+        # 补偿固定角度偏差
+        yaw += self.yaw_bias
+        pitch += self.pitch_bias
 
         return yaw, pitch, dist, (int(laser_u), int(laser_v))
     
