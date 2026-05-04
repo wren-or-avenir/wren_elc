@@ -300,7 +300,7 @@ class EmmMotor:
 
         return angle
 
-    def emm_v5_move_to_angle(self, addr=None, angle_deg=0.0, vel_rpm=0, acc=0, abs_mode=False):
+    def emm_v5_move_to_angle(self, addr=None, angle_deg=0.0, vel_rpm=0, acc=0, abs_mode=True):
         """
         按角度移动电机
         :param angle_deg: 目标角度 (度)，支持负数
@@ -333,6 +333,13 @@ class EmmMotor:
             raF=abs_mode, 
             snF=False
         )
+
+    def set_temporary_zero(self, addr=None):
+            """设置临时零点（断电丢失）"""
+            addr = self.motor_id if addr is None else addr
+            # 协议: Addr 93 88 00(不存储) 6B
+            cmd = bytes([addr, 0x93, 0x88, 0x00, 0x6B])
+            self._send_cmd(cmd)    
 
     def close(self):
         """关闭串口"""

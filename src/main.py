@@ -7,7 +7,7 @@ from models.stepper import SysParams, EmmMotor
 from models.pid import PIDController
 import Hobot.GPIO as GPIO
 from models.status import GPIN
-# from models.dm_imu import IMU
+from models.dm_imu import IMU
 
 # ---------放在最前面：特别注意的接口和开关----------
 camera_index = 0        # 摄像头索引，需根据实际情况调整
@@ -79,6 +79,17 @@ def update_params():
 
 def main():
     print("视觉跟踪系统启动... 按 'q' 键退出。")
+
+    # === 零点重置 ===
+    stepper_yaw.set_temporary_zero()
+    stepper_pitch.set_temporary_zero()
+    
+    # 验证
+    yaw_chk = stepper_yaw.get_current_position_angle()
+    pitch_chk = stepper_pitch.get_current_position_angle()
+    print(f"✅ 零点重置 -> Yaw:{yaw_chk:.2f}° Pitch:{pitch_chk:.2f}°")
+    # =================
+
     init_board()
     prev_time = time.time()
 
