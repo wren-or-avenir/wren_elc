@@ -173,7 +173,7 @@ class Tracker:
             if self.status != Status.LOST:
                 yaw, pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
                 self.onfire = self.check_onfire(pitch, yaw)
-                yaw, pitch = imu.get_abs(rel_yaw, rel_pitch)
+                yaw, pitch = imu.get_abs(yaw, pitch)
                 self.laser_pos = laser_pos
                 return yaw, pitch, dist, self.status, laser_pos
             else:
