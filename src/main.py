@@ -41,13 +41,19 @@ def init_board():
     cv2.namedWindow('DETECTOR', cv2.WINDOW_FREERATIO)  
     cv2.namedWindow('BIN', cv2.WINDOW_FREERATIO)      
 
-    cv2.createTrackbar('yaw_kp', 'Controls', 2, 100, nothing)   
-    cv2.createTrackbar('yaw_ki', 'Controls', 0, 100, nothing)   
-    cv2.createTrackbar('yaw_kd', 'Controls', 1, 100, nothing)  
+    cv2.createTrackbar('system_delay', 'Controls', 21, 100, nothing)
 
-    cv2.createTrackbar('pitch_kp', 'Controls', 2, 100, nothing)   
+    cv2.createTrackbar('yaw_kp', 'Controls', 28, 100, nothing)   
+    cv2.createTrackbar('yaw_ki', 'Controls', 2, 100, nothing)   
+    cv2.createTrackbar('yaw_kd', 'Controls', 20, 100, nothing)
+
+    cv2.createTrackbar('yaw_sentry_speed', 'Controls', 45, 100, nothing)
+
+    cv2.createTrackbar('pitch_kp', 'Controls', 22, 100, nothing)   
     cv2.createTrackbar('pitch_ki', 'Controls', 0, 100, nothing)   
-    cv2.createTrackbar('pitch_kd', 'Controls', 1, 100, nothing)  
+    cv2.createTrackbar('pitch_kd', 'Controls', 16, 100, nothing)  
+
+    cv2.createTrackbar('onfire_tol', 'Controls', 5, 100, nothing) # 开火容忍度，单位为0.1度
 
     cv2.createTrackbar('vel_rpm', 'Controls', 3000, 5000, nothing)
     cv2.createTrackbar('acc', 'Controls', 100, 255, nothing)
@@ -55,17 +61,24 @@ def init_board():
 
 def update_params():
     """回调获取滑块参数"""
+    system_delay = cv2.getTrackbarPos('system_delay', 'Controls')/10
     yaw_kp = cv2.getTrackbarPos('yaw_kp', 'Controls')/1000
-    yaw_ki = cv2.getTrackbarPos('yaw_ki', 'Controls')/1000000
-    yaw_kd = cv2.getTrackbarPos('yaw_kd', 'Controls')/1000000
+    yaw_ki = cv2.getTrackbarPos('yaw_ki', 'Controls')/10000
+    yaw_kd = cv2.getTrackbarPos('yaw_kd', 'Controls')/10000
+
+    yaw_sentry_speed = cv2.getTrackbarPos('yaw_sentry_speed', 'Controls')/10
 
     pitch_kp = cv2.getTrackbarPos('pitch_kp', 'Controls')/1000
-    pitch_ki = cv2.getTrackbarPos('pitch_ki', 'Controls')/100000
-    pitch_kd = cv2.getTrackbarPos('pitch_kd', 'Controls')/100000
+    pitch_ki = cv2.getTrackbarPos('pitch_ki', 'Controls')/10000
+    pitch_kd = cv2.getTrackbarPos('pitch_kd', 'Controls')/10000
+
+    onfire_tol = cv2.getTrackbarPos('onfire_tol', 'Controls')/10
 
     vel_rpm = cv2.getTrackbarPos('vel_rpm', 'Controls')
     acc = cv2.getTrackbarPos('acc', 'Controls')
 
+    tracker.onfire_tol = onfire_tol
+    tracker.system_delay = system_delay
     #赋值给模块
     pid_yaw.set_Kp(yaw_kp)
     pid_yaw.set_Ki(yaw_ki)
@@ -75,19 +88,19 @@ def update_params():
     pid_pitch.set_Ki(pitch_ki)
     pid_pitch.set_Kd(pitch_kd)
 
-    return vel_rpm, acc
+    return vel_rpm, acc, yaw_sentry_speed
 
 def main():
     print("视觉跟踪系统启动... 按 'q' 键退出。")
 
-    # === 零点重置 ===
-    stepper_yaw.set_temporary_zero()
-    stepper_pitch.set_temporary_zero()
+    # # === 零点重置 ===
+    # stepper_yaw.set_temporary_zero()
+    # stepper_pitch.set_temporary_zero()
     
-    # 验证
-    yaw_chk = stepper_yaw.get_current_position_angle()
-    pitch_chk = stepper_pitch.get_current_position_angle()
-    print(f"✅ 零点重置 -> Yaw:{yaw_chk:.2f}° Pitch:{pitch_chk:.2f}°")
+    # # 验证
+    # yaw_chk = stepper_yaw.get_current_position_angle()
+    # pitch_chk = stepper_pitch.get_current_position_angle()
+    # print(f"✅ 零点重置 -> Yaw:{yaw_chk:.2f}° Pitch:{pitch_chk:.2f}°")
     # =================
 
     init_board()
@@ -105,7 +118,7 @@ def main():
                 break
 
             #更新参数
-            vel_rpm, acc = update_params()
+            vel_rpm, acc, yaw_sentry_speed = update_params()
             
             # 目标检测
             target = detector.detect(frame)
@@ -173,11 +186,26 @@ def main():
                 except Exception as e:
                     print(f" pitch 电机指令异常: {e}")
                 
-            elif status == Status.LOST:#丢帧超多阈值，停止运动
+            elif status == Status.LOST: # 丢帧超多阈值，停止运动
                 #重置pid
                 pid_yaw.reset()
                 pid_pitch.reset()
-                pass
+                try:
+                    dir = 0.0
+                    if tracker.last_cy_vel != 0:
+                        dir = tracker.last_cy_vel / abs(tracker.last_cy_vel)
+                    print(f"last_cy_vel: {tracker.last_cy_vel} | dir {dir}")
+                    move_speed = dir * yaw_sentry_speed * pid_yaw.Kp
+                    stepper_yaw.emm_v5_move_to_angle(
+                        angle_deg=-move_speed, vel_rpm=vel_rpm, acc=acc, abs_mode=False)
+                except Exception as e:
+                    print(f" Yaw 电机指令异常: {e}")
+                            
+                try:
+                    stepper_pitch.emm_v5_move_to_angle(
+                        angle_deg= 0.0, vel_rpm=vel_rpm, acc=acc, abs_mode=True)
+                except Exception as e:
+                    print(f" pitch 电机指令异常: {e}")
             # 退出控制
             if cv2.waitKey(1) & 0xFF == ord('q'): break
             
