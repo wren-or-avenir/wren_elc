@@ -11,8 +11,8 @@ from models.dm_imu import IMU
 
 # ---------放在最前面：特别注意的接口和开关----------
 camera_index = 0        # 摄像头索引，需根据实际情况调整
-yaw_port = '/dev/ttyACM0'      # yaw轴电机串口
-pitch_port = '/dev/ttyACM1'     # pitch轴电机串口
+yaw_port = '/dev/ttyS1'      # yaw轴电机串口
+pitch_port = '/dev/ttyS2'     # pitch轴电机串口
 
 use_kf = True           # 是否启用卡尔曼滤波
 show_windows = True     # 是否显示调试窗口
@@ -41,11 +41,11 @@ def init_board():
     cv2.namedWindow('DETECTOR', cv2.WINDOW_FREERATIO)  
     cv2.namedWindow('BIN', cv2.WINDOW_FREERATIO)      
 
-    cv2.createTrackbar('system_delay', 'Controls', 21, 100, nothing)
+    cv2.createTrackbar('system_delay', 'Controls', 20, 100, nothing)
 
-    cv2.createTrackbar('yaw_kp', 'Controls', 28, 100, nothing)   
-    cv2.createTrackbar('yaw_ki', 'Controls', 2, 100, nothing)   
-    cv2.createTrackbar('yaw_kd', 'Controls', 20, 100, nothing)
+    cv2.createTrackbar('yaw_kp', 'Controls', 22, 100, nothing)   
+    cv2.createTrackbar('yaw_ki', 'Controls', 0, 100, nothing)   
+    cv2.createTrackbar('yaw_kd', 'Controls', 16, 100, nothing)
 
     cv2.createTrackbar('yaw_sentry_speed', 'Controls', 45, 100, nothing)
 
@@ -53,7 +53,7 @@ def init_board():
     cv2.createTrackbar('pitch_ki', 'Controls', 0, 100, nothing)   
     cv2.createTrackbar('pitch_kd', 'Controls', 16, 100, nothing)  
 
-    cv2.createTrackbar('onfire_tol', 'Controls', 5, 100, nothing) # 开火容忍度，单位为0.1度
+    cv2.createTrackbar('onfire_tol', 'Controls', 3, 100, nothing) # 开火容忍度，单位为0.1度
 
     cv2.createTrackbar('vel_rpm', 'Controls', 3000, 5000, nothing)
     cv2.createTrackbar('acc', 'Controls', 100, 255, nothing)
