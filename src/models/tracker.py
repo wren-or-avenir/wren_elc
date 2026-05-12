@@ -3,7 +3,6 @@ import numpy as np
 from .Kalman import KalmanFilter
 import time
 from enum import IntEnum
-from .dm_imu import imu 
 import cv2
 
 # 追踪状态展示
@@ -62,8 +61,6 @@ class Tracker:
         pts = board.points
         h_left = math.sqrt((pts[0][0]-pts[1][0])**2 + (pts[0][1]-pts[1][1])**2)
         h_right = math.sqrt((pts[3][0]-pts[2][0])**2 + (pts[3][1]-pts[2][1])**2)
-        # h_left = math.sqrt((pts[0][0]-pts[3][0])**2 + (pts[0][1]-pts[3][1])**2)
-        # h_right = math.sqrt((pts[1][0]-pts[2][0])**2 + (pts[1][1]-pts[2][1])**2)
         avg_h_px = (h_left + h_right) / 2.0
         # 除零保护
         if avg_h_px < 1: 
@@ -97,16 +94,15 @@ class Tracker:
                 pred_cy, _ = self.kf_cy.predict(dt)
                 pred_dist, _ = self.kf_dist.predict(dt)
                 # 更新
-                update_cx, _ = self.kf_cx.update(target.center[0])
+                update_cx, vx = self.kf_cx.update(target.center[0])
                 update_cy, self.last_cy_vel = self.kf_cy.update(target.center[1])
-                update_dist, _ = self.kf_dist.update(self.get_dist(target))
+                update_dist, vdist = self.kf_dist.update(self.get_dist(target))
 
                 # 加上系统延时预测，用predict
                 if self.system_delay > 0:
-                    delay_pred_cx, _ = self.kf_cx.predict(self.system_delay)
-                    delay_pred_cy, _ = self.kf_cy.predict(self.system_delay)
-                    delay_pred_dist, _ = self.kf_dist.predict(self.system_delay)
-                    cx, cy, dist = delay_pred_cx, delay_pred_cy, delay_pred_dist
+                    cx = update_cx + vx * self.system_delay
+                    cy = update_cy + self.last_cy_vel * self.system_delay
+                    dist = update_dist + vdist * self.system_delay
                 else:
                     cx, cy, dist = update_cx, update_cy, update_dist
             else:
@@ -182,11 +178,10 @@ class Tracker:
         if board is not None and board.center is not None:
             filtered_center, filtered_dist = self.filter(board)
             if self.status != Status.LOST:
-                yaw, pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
-                self.onfire = self.check_onfire(pitch, yaw)
-                yaw, pitch = imu.get_abs(yaw, pitch)
+                vis_yaw, vis_pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
+                self.onfire = self.check_onfire(vis_pitch, vis_yaw)
                 self.laser_pos = laser_pos
-                return yaw, pitch, dist, self.status, laser_pos
+                return vis_yaw, vis_pitch, dist, self.status, laser_pos
             else:
                 self.laser_pos = None
                 return 0.0, 0.0, 0.0, self.status, None
