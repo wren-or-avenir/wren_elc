@@ -42,7 +42,7 @@ w_target_yaw = 0.0
 w_target_pitch = 0.0
 # 供控制线程读取的滑块参数
 ctrl_vel_rpm = 3000
-ctrl_acc = 50
+ctrl_acc = 0
 # ------------------------------------------------
 
 def nothing(x):
@@ -55,18 +55,18 @@ def init_board():
     cv2.namedWindow('DETECTOR', cv2.WINDOW_FREERATIO)  
     cv2.namedWindow('BIN', cv2.WINDOW_FREERATIO)      
 
-    cv2.createTrackbar('yaw_kp', 'Controls', 0, 100, nothing)   
+    cv2.createTrackbar('yaw_kp', 'Controls', 12, 100, nothing)   
     cv2.createTrackbar('yaw_ki', 'Controls', 0, 100, nothing)   
-    cv2.createTrackbar('yaw_kd', 'Controls', 0, 100, nothing)
+    cv2.createTrackbar('yaw_kd', 'Controls', 1, 100, nothing)
 
-    cv2.createTrackbar('pitch_kp', 'Controls', 0, 100, nothing)   
+    cv2.createTrackbar('pitch_kp', 'Controls', 14, 100, nothing)   
     cv2.createTrackbar('pitch_ki', 'Controls', 0, 100, nothing)   
     cv2.createTrackbar('pitch_kd', 'Controls', 0, 100, nothing)  
 
     cv2.createTrackbar('onfire_tol', 'Controls', 5, 100, nothing) # 开火容忍度，单位为0.1度
 
     cv2.createTrackbar('vel_rpm', 'Controls', 3000, 5000, nothing)
-    cv2.createTrackbar('acc', 'Controls', 50, 255, nothing)
+    cv2.createTrackbar('acc', 'Controls', 0, 255, nothing)
     cv2.createTrackbar('show', 'Controls', 1, 1, nothing)
 
     # 视差参数 (范围 -5.00cm 到 +5.00cm)   单位：0.01cm
@@ -80,8 +80,8 @@ def init_board():
 
 def update_params():
     """回调获取滑块参数"""
-    yaw_kp = cv2.getTrackbarPos('yaw_kp', 'Controls')/10000
-    yaw_ki = cv2.getTrackbarPos('yaw_ki', 'Controls')/10000
+    yaw_kp = cv2.getTrackbarPos('yaw_kp', 'Controls')/1000
+    yaw_ki = cv2.getTrackbarPos('yaw_ki', 'Controls')/1000
     yaw_kd = cv2.getTrackbarPos('yaw_kd', 'Controls')/10000
 
     pitch_kp = cv2.getTrackbarPos('pitch_kp', 'Controls')/10000
@@ -158,18 +158,24 @@ def control_thread():
         
         # 下发纯速度指令
         try:
+            # ==== 新增：超级调试打印 ====
+            # 每隔一段时间打印一次（防止刷屏太快看不清终端）
+            if int(time.time() * 10) % 5 == 0: 
+                print(f"DEBUG 电机指令 -> Error:{error_yaw:.2f}度 | Kp:{pid_yaw.Kp:.4f} | 下发速度:{vel_out_yaw} RPM")
+            # ============================
+            
             # 加入 0.5 度的死区，防止到位后电机高频微调发出滋滋声
-            if abs(error_yaw) > 0.1:
+            if abs(error_yaw) > 0.05:
                 stepper_yaw.emm_v5_vel_control(dir=dir_yaw, vel=vel_out_yaw, acc=ctrl_acc, snF=False)
             else:
                 stepper_yaw.emm_v5_vel_control(dir=dir_yaw, vel=0, acc=ctrl_acc, snF=False) # 瞬间刹停
                 
-            if abs(error_pitch) > 0.1:
+            if abs(error_pitch) > 0.05:
                 stepper_pitch.emm_v5_vel_control(dir=dir_pitch, vel=vel_out_pitch, acc=ctrl_acc, snF=False)
             else:
                 stepper_pitch.emm_v5_vel_control(dir=dir_pitch, vel=0, acc=ctrl_acc, snF=False)
-        except:
-            pass
+        except Exception as e:
+            print(f"电机通讯失败: {e}")
             
         # 严格保持 200Hz 刷新率
         cost_time = time.time() - start_time
@@ -255,9 +261,7 @@ def main():
                     cv2.imshow("BIN", bin_img)
                 if vis_trk is not None:
                     cv2.imshow("Tracker", vis_trk)
-            else:
-                cv2.destroyAllWindows()
-    
+            
             # 退出控制
             if cv2.waitKey(1) & 0xFF == ord('q'): break
             
