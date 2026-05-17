@@ -11,33 +11,26 @@ class Camera:
             raise RuntimeError("不能打开任何摄像头")
         self.cam = cv2.VideoCapture(index)
         
-        # ====== 极其严格的设置顺序 ======
-        # 1. 必须先设置格式为 MJPG (用单引号拆开写，兼容性最好)
-        self.cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-        
-        # 2. 再设置宽高
-        self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        # 60帧的设置
+        self.cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))  # 设置格式为 MJPG
+        self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, width)               # 设置宽高
         self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, height)     
-        
-        # 3. 最后强求 60 帧
-        self.cam.set(cv2.CAP_PROP_FPS, 60)
-        # ==============================
+        self.cam.set(cv2.CAP_PROP_FPS, 60)                          # 强求 60 帧
 
         # 获取实际生效的画面宽度与高度
         self.width = int(self.cam.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
-        # --- 暴力排雷：直接打印底层最终妥协的参数 ---
+        # 排雷：打印底层最终的参数 
         actual_fps = self.cam.get(cv2.CAP_PROP_FPS)
-        actual_fourcc = int(self.cam.get(cv2.CAP_PROP_FOURCC))
-        # 解码 FOURCC 变成人类可读的字符串
+        actual_fourcc = int(self.cam.get(cv2.CAP_PROP_FOURCC))      # 解码 FOURCC 变成可读的字符串
         fourcc_str = "".join([chr((actual_fourcc >> 8 * i) & 0xFF) for i in range(4)]) if actual_fourcc != 0 else "未知"
         print(f"\n[摄像头底层核查] 格式: {fourcc_str} | 目标帧率: 60 | 实际生效帧率: {actual_fps}\n")
-        # ----------------------------------------
 
         # 长度为1的线程队列
         self.q = queue.Queue(maxsize=1)
         self.running = True
+
         # 线程设置
         self.thread = threading.Thread(target=self._update, daemon=True)
         self.thread.start()

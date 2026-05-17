@@ -12,7 +12,7 @@ from models.status import GPIN
 from models.dm_imu import imu
 
 
-# ---------放在最前面：特别注意的接口和开关---------------------
+# --------- 放在最前面：特别注意的接口和开关 ---------------------
 camera_index = 0             # 摄像头索引，需根据实际情况调整
 yaw_port = '/dev/ttyS1'      # yaw轴电机串口
 pitch_port = '/dev/ttyS2'    # pitch轴电机串口
@@ -21,7 +21,7 @@ use_kf = True           # 是否启用卡尔曼滤波
 show_windows = True     # 是否显示调试窗口
 # ---------------------------------------------------------
 
-# -----------------模块初始化--------------------------------------------------------------
+# ----------------- 模块初始化 --------------------------------------------------------------
 camera = Camera(index = camera_index, width = 640, height = 480)
 detector = Detector(min_area = 5000, max_area = 500000)
 tracker = Tracker(f_pixel_h = 725.6, real_height = 17.5, use_kf = use_kf) 
@@ -35,7 +35,7 @@ lazer = GPIN(pin=16, mode=1)        # 激光笔控制
 heart_beat = GPIN(pin=18, mode=1)   # 呼吸灯，用于表示主程序还在跑
 # ----------------------------------------------------------------------------------------
 
-# ------------------全局变量-----------------------
+# ------------------ 全局变量 -----------------------
 # 世界坐标系下的目标位置，单位为度
 system_running = True    # 控制线程状态
 w_target_yaw = 0.0
@@ -63,20 +63,20 @@ def init_board():
     cv2.createTrackbar('pitch_ki', 'Controls', 0, 100, nothing)   
     cv2.createTrackbar('pitch_kd', 'Controls', 0, 100, nothing)  
 
-    cv2.createTrackbar('onfire_tol', 'Controls', 5, 100, nothing) # 开火容忍度，单位为0.1度
+    cv2.createTrackbar('onfire_tol', 'Controls', 8, 100, nothing) # 开火容忍度，单位为0.1度
 
     cv2.createTrackbar('vel_rpm', 'Controls', 3000, 5000, nothing)
     cv2.createTrackbar('acc', 'Controls', 0, 255, nothing)
     cv2.createTrackbar('show', 'Controls', 1, 1, nothing)
 
     # 视差参数 (范围 -5.00cm 到 +5.00cm)   单位：0.01cm
-    cv2.createTrackbar('ref_x', 'Controls', 485, 1000, nothing)    # 初始值 485 -> -0.15
-    cv2.createTrackbar('ref_y', 'Controls', 635, 1000, nothing)    # 初始值 635 -> 1.35
+    cv2.createTrackbar('ref_x', 'Controls', 475, 1000, nothing)    # 初始值 485 -> -0.15
+    cv2.createTrackbar('ref_y', 'Controls', 610, 1000, nothing)    # 初始值 635 -> 1.35
     cv2.createTrackbar('ref_z', 'Controls', 500, 1000, nothing)    # 初始值 500 -> 0.0
 
     # 角度偏差补偿 (范围 -5.0度 到 +5.0度)     单位: 0.1度
-    cv2.createTrackbar('yaw_bias', 'Controls', 27, 100, nothing)   # 初始值 27 -> -2.3
-    cv2.createTrackbar('pitch_bias', 'Controls', 48, 100, nothing) # 初始值 48 -> -0.2
+    cv2.createTrackbar('yaw_bias', 'Controls', 28, 100, nothing)   # 初始值 27 -> -2.3
+    cv2.createTrackbar('pitch_bias', 'Controls', 52, 100, nothing) # 初始值 48 -> -0.2
 
 def update_params():
     """回调获取滑块参数"""
@@ -158,11 +158,11 @@ def control_thread():
         
         # 下发纯速度指令
         try:
-            # ==== 新增：超级调试打印 ====
+            # ============= 新增：调试打印 ================
             # 每隔一段时间打印一次（防止刷屏太快看不清终端）
             if int(time.time() * 10) % 5 == 0: 
                 print(f"DEBUG 电机指令 -> Error:{error_yaw:.2f}度 | Kp:{pid_yaw.Kp:.4f} | 下发速度:{vel_out_yaw} RPM")
-            # ============================
+            # ============================================
             
             # 加入 0.5 度的死区，防止到位后电机高频微调发出滋滋声
             if abs(error_yaw) > 0.05:
