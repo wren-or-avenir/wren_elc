@@ -23,7 +23,7 @@ show_windows = True     # 是否显示调试窗口
 
 # ----------------- 模块初始化 --------------------------------------------------------------
 camera = Camera(index = camera_index, width = 640, height = 480)
-detector = Detector(min_area = 5000, max_area = 500000)
+detector = Detector(min_area = 3000, max_area = 500000)
 tracker = Tracker(f_pixel_h = 725.6, real_height = 17.5, use_kf = use_kf) 
 
 stepper_yaw = EmmMotor(port = yaw_port, baudrate = 115200, timeout = 1, motor_id = 1)
@@ -84,8 +84,8 @@ def update_params():
     yaw_ki = cv2.getTrackbarPos('yaw_ki', 'Controls')/1000
     yaw_kd = cv2.getTrackbarPos('yaw_kd', 'Controls')/10000
 
-    pitch_kp = cv2.getTrackbarPos('pitch_kp', 'Controls')/10000
-    pitch_ki = cv2.getTrackbarPos('pitch_ki', 'Controls')/10000
+    pitch_kp = cv2.getTrackbarPos('pitch_kp', 'Controls')/1000
+    pitch_ki = cv2.getTrackbarPos('pitch_ki', 'Controls')/1000
     pitch_kd = cv2.getTrackbarPos('pitch_kd', 'Controls')/10000
 
     onfire_tol = cv2.getTrackbarPos('onfire_tol', 'Controls')/10
