@@ -55,11 +55,11 @@ def init_board():
     cv2.namedWindow('DETECTOR', cv2.WINDOW_FREERATIO)  
     cv2.namedWindow('BIN', cv2.WINDOW_FREERATIO)      
 
-    cv2.createTrackbar('yaw_kp', 'Controls', 12, 100, nothing)   
+    cv2.createTrackbar('yaw_kp', 'Controls', 6, 100, nothing)   
     cv2.createTrackbar('yaw_ki', 'Controls', 0, 100, nothing)   
     cv2.createTrackbar('yaw_kd', 'Controls', 1, 100, nothing)
 
-    cv2.createTrackbar('pitch_kp', 'Controls', 14, 100, nothing)   
+    cv2.createTrackbar('pitch_kp', 'Controls', 5, 100, nothing)   
     cv2.createTrackbar('pitch_ki', 'Controls', 0, 100, nothing)   
     cv2.createTrackbar('pitch_kd', 'Controls', 0, 100, nothing)  
 
@@ -75,8 +75,8 @@ def init_board():
     cv2.createTrackbar('ref_z', 'Controls', 500, 1000, nothing)    # 初始值 500 -> 0.0
 
     # 角度偏差补偿 (范围 -5.0度 到 +5.0度)     单位: 0.1度
-    cv2.createTrackbar('yaw_bias', 'Controls', 28, 100, nothing)   # 初始值 27 -> -2.3
-    cv2.createTrackbar('pitch_bias', 'Controls', 52, 100, nothing) # 初始值 48 -> -0.2
+    cv2.createTrackbar('yaw_bias', 'Controls', 30, 100, nothing)   # 初始值 27 -> -2.3
+    cv2.createTrackbar('pitch_bias', 'Controls', 49, 100, nothing) # 初始值 48 -> -0.2
 
 def update_params():
     """回调获取滑块参数"""
@@ -160,8 +160,7 @@ def control_thread():
         try:
             # ============= 新增：调试打印 ================
             # 每隔一段时间打印一次（防止刷屏太快看不清终端）
-            if int(time.time() * 10) % 5 == 0: 
-                print(f"DEBUG 电机指令 -> Error:{error_yaw:.2f}度 | Kp:{pid_yaw.Kp:.4f} | 下发速度:{vel_out_yaw} RPM")
+            # q指令 -> Error:{error_yaw:.2f}度 | Kp:{pid_yaw.Kp:.4f} | 下发速度:{vel_out_yaw} RPM")
             # ============================================
             
             # 加入 0.5 度的死区，防止到位后电机高频微调发出滋滋声

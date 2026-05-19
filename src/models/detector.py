@@ -28,27 +28,19 @@ class Detector:
         return binary
         
     def find_board(self, binary):
-        """
-        查找逻辑为内层白色矩形的外轮廓（内轮廓）、外层黑色空心矩形的的外轮廓（外轮廓），两层轮廓作为保险
-        优先查找内轮廓
-        轮廓查找后对于矩形的四点运用两层排序逻辑作为保险
-        """
         boards = []
-
         contours, hierarchy = cv2.findContours(binary, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
         
-        # 安全检查，如果画面中没有任何轮廓，hierarchy 将为 None
-        if hierarchy is None:
+        # 1. 极度严谨的“空值与越界”拦截
+        if hierarchy is None or len(contours) == 0 or len(hierarchy) == 0 or len(hierarchy[0]) != len(contours):
             self.boards = []
             return []
 
-        # 首先尝试寻找内轮廓
         inner_contours = []
         for i, contour in enumerate(contours):
-            if hierarchy[0][i][3] != -1:  # 有内轮廓
+            if hierarchy[0][i][3] != -1: 
                 inner_contours.append((i, contour))
         
-        # 如果没有内轮廓，则使用外轮廓
         if inner_contours:
             target_contours = inner_contours
         else:
@@ -61,37 +53,36 @@ class Detector:
                 approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
                 
                 if len(approx) == 4:
+                    # 2. 凸包性校验：物理世界的靶纸透视畸变后必定是凸多边形
+                    if not cv2.isContourConvex(approx):
+                        continue
+
+                    # 3. 长宽比过滤与除零保护：排除电线、细长支架等干扰 (放宽比例到 0.8 ~ 1.8)
+                    x, y, w, h = cv2.boundingRect(approx)
+                    aspect_ratio = float(w) / max(h, 1)
+                    if not (0.8 < aspect_ratio < 1.8):
+                        continue
+
+                    # 质心极角排序：彻底解决不规则形状导致的点重合Bug
                     points = approx.reshape(4, 2)
+                    cx, cy = np.mean(points, axis=0)
+                    angles = np.arctan2(points[:, 1] - cy, points[:, 0] - cx)
+                    sorted_idx = np.argsort(angles)
                     
-                    # 和差排序逻辑
-                    sum_xy = points.sum(axis=1)
-                    diff_xy = points[:, 0] - points[:, 1]
+                    # atan2在图像坐标系(y轴朝下)的排序结果严格依次为：左上, 右上, 右下, 左下
+                    # 按照你原代码 [左上, 左下, 右下, 右上] 的顺序装填
                     sorted_points = [
-                        points[np.argmin(sum_xy)],  # 左上
-                        points[np.argmax(diff_xy)], # 左下
-                        points[np.argmax(sum_xy)],  # 右下
-                        points[np.argmin(diff_xy)]  # 右上
+                        points[sorted_idx[0]],  # 左上
+                        points[sorted_idx[3]],  # 左下
+                        points[sorted_idx[2]],  # 右下
+                        points[sorted_idx[1]]   # 右上
                     ]
                     
-                    # 检查排序后的点是否有重合
-                    unique_points = set(tuple(pt) for pt in sorted_points)
-                    
-                    if len(unique_points) < 4:
-                        # 如果有任何点重合，重新按极值排序
-                        sorted_points = [
-                            points[np.argmin(points[:, 0])],  # 左上：最左边的x坐标
-                            points[np.argmin(points[:, 1])],  # 左下：最上面的y坐标
-                            points[np.argmax(points[:, 0])],  # 右下：最右边的x坐标
-                            points[np.argmax(points[:, 1])]   # 右上：最下面的y坐标
-                        ]
-                    
-                    # 实例
                     board = Board()
                     board.points = [tuple(map(int, pt)) for pt in sorted_points]
                     board.area = area
-                    
-                    # 计算对角线交点
                     board.center = self._calculate_intersection(board.points)
+                    
                     if board.center is not None:
                         boards.append(board)
         
