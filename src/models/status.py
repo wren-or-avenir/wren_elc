@@ -78,3 +78,20 @@ class GPIN:
         try: GPIO.output(self.pin, GPIO.LOW)
         except RuntimeError: pass
         GPIO.cleanup()
+
+class ModeSwitch:
+    def __init__(self, pin=37):
+        self.pin = pin
+        self.is_drawing = False
+        
+        # 顶部的 GPIO.setmode 已经设置了 BOARD，直接配置引脚
+        GPIO.setup(self.pin, GPIO.IN)
+        # 下降沿中断，防抖 300ms
+        GPIO.add_event_detect(self.pin, GPIO.FALLING, callback=self._toggle, bouncetime=300)
+
+    def _toggle(self, channel):
+        self.is_drawing = not self.is_drawing
+        if self.is_drawing:
+            print("\n[状态切换] >>> 开始闭环画圆与畸变补偿！")
+        else:
+            print("\n[状态切换] >>> 停止画圆，死咬靶心。")

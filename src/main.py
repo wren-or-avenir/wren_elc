@@ -1,5 +1,6 @@
 import cv2
 import time
+import math
 import threading
 import numpy as np
 from models.cam import Camera
@@ -8,7 +9,7 @@ from models.tracker import Tracker, Status
 from models.stepper import SysParams, EmmMotor
 from models.pid import PIDController
 import Hobot.GPIO as GPIO
-from models.status import GPIN
+from models.status import GPIN, ModeSwitch
 from models.dm_imu import imu
 
 
@@ -33,6 +34,7 @@ pid_pitch = PIDController(Kp = 5, Ki = 5, Kd = 5, dt = 1/30)
 
 lazer = GPIN(pin=16, mode=1)        # 激光笔控制
 heart_beat = GPIN(pin=18, mode=1)   # 呼吸灯，用于表示主程序还在跑
+mode_switch = ModeSwitch(pin=37)    # 实例化画圆开关，接在37号引脚
 # ----------------------------------------------------------------------------------------
 
 # ------------------ 全局变量 -----------------------
@@ -40,6 +42,7 @@ heart_beat = GPIN(pin=18, mode=1)   # 呼吸灯，用于表示主程序还在跑
 system_running = True    # 控制线程状态
 w_target_yaw = 0.0
 w_target_pitch = 0.0
+w_target_dist = 100.0
 # 供控制线程读取的滑块参数
 ctrl_vel_rpm = 3000
 ctrl_acc = 0
@@ -123,7 +126,7 @@ def control_thread():
     内环：高频姿态控制线程
     以 200Hz 运行，死咬靶纸的世界坐标，疯狂下发指令对抗底盘运动
     """
-    global w_target_yaw, w_target_pitch, system_running, ctrl_vel_rpm, ctrl_acc
+    global w_target_yaw, w_target_pitch, w_target_dist, system_running, ctrl_vel_rpm, ctrl_acc
 
     while system_running:
         start_time = time.time()
@@ -134,10 +137,35 @@ def control_thread():
         if pkt is not None:
             _, (_, _, curr_yaw) = pkt
             
-        # 计算空间角度误差
-        error_yaw = w_target_yaw - curr_yaw
-        error_pitch = w_target_pitch - curr_pitch
+        # ================== [新增] 闭环相位推导与斜视畸变补偿 ==================
+        target_y = w_target_yaw
+        target_p = w_target_pitch
 
+        if mode_switch.is_drawing:
+            # 1. 解算小车绝对物理相位 (基于你的 55-160cm, 45度极值推导)
+            dist_norm = (w_target_dist - 107.5) / 52.5
+            yaw_norm = curr_yaw / 45.0
+            phase = math.atan2(yaw_norm, dist_norm)
+            
+            # 若发现画圆方向与小车行进方向冲突，取消下行注释反转相位：
+            # phase = -phase
+
+            # 2. 斜视投影畸变补偿 (神级优化)
+            yaw_rad = math.radians(curr_yaw)
+            # 横向：因斜视导致靶面上物理圆拉长，需乘以 cos(yaw) 压缩云台横向振幅
+            amp_yaw = math.degrees(math.atan2(6.0 * math.cos(yaw_rad), w_target_dist))
+            # 纵向：垂直视场不受水平斜视影响，保持 6cm 对应角分辨率
+            amp_pitch = math.degrees(math.atan2(6.0, w_target_dist))
+
+            # 3. 叠加画圆最终目标角
+            target_y += amp_yaw * math.cos(phase)
+            target_p += amp_pitch * math.sin(phase)
+        # =========================================================================
+
+        # [修改] 使用叠加后的 target_y 和 target_p 计算最终空间误差
+        error_yaw = target_y - curr_yaw
+        error_pitch = target_p - curr_pitch
+        
         # PID 计算出目标速度
         correction_yaw = pid_yaw.compute(error_yaw)
         correction_pitch = pid_pitch.compute(error_pitch)
@@ -184,7 +212,7 @@ def control_thread():
             time.sleep(sleep_time)
             
 def main():
-    global w_target_yaw, w_target_pitch, system_running, ctrl_vel_rpm, ctrl_acc, show_windows
+    global w_target_yaw, w_target_pitch, w_target_dist, system_running, ctrl_vel_rpm, ctrl_acc, show_windows
 
     print("视觉跟踪系统启动... 按 'q' 键退出。")
     init_board()
@@ -223,6 +251,7 @@ def main():
             if status in [Status.TRACK, Status.TMP_LOST]:
                 w_target_yaw, _ = imu.get_abs(vis_yaw, vis_pitch)
                 w_target_pitch = vis_pitch
+                w_target_dist = dist if dist > 0 else 100.0
             else:
                 # 纯视觉环的保命机制：彻底丢失目标时，立刻将 Pitch 误差清零刹车！
                 w_target_pitch = 0.0
