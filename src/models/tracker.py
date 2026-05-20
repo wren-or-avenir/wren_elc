@@ -28,7 +28,7 @@ class Tracker:
         self.last_cy_vel = 0.0
 
         self.lost_count = 0  # 丢帧数
-        self.frame_lost_tol = 8   # 丢帧容忍度 
+        self.frame_lost_tol = 5   # 丢帧容忍度 
         self.last_time = None
 
         self.onfire = False # 开火状态，默认为关闭
