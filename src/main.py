@@ -45,8 +45,10 @@ ctrl_vel_rpm = 3000
 ctrl_acc = 0
 
 # ======= 新增：全自主盲搜状态量 =======
-has_tracked_ever = False     # 记录自上电起，是否至少成功捕获过一次目标
-yaw_scan_speed = 4.0         # 盲搜旋转速度 (度/秒)，可通过滑块调节
+has_tracked_ever = False     
+yaw_scan_speed = 8.0         # 按照需求改为 8.0 度/秒
+is_searching = False         # 盲搜状态标志，用于通知内环
+search_dir = 1.0             # 盲搜转动方向 (1.0为正向，-1.0为反向)
 # ====================================
 
 # ------------------------------------------------
@@ -76,7 +78,7 @@ def init_board():
     cv2.createTrackbar('show', 'Controls', 1, 1, nothing)
 
     # ======= 新增：盲搜巡航速度滑块 =======
-    cv2.createTrackbar('scan_speed', 'Controls', 4, 50, nothing) # 默认3度/秒
+    cv2.createTrackbar('scan_speed', 'Controls', 8, 50, nothing) # 默认3度/秒
     # ====================================
 
     # 视差参数 (范围 -5.00cm 到 +5.00cm)   单位：0.01cm
@@ -139,6 +141,7 @@ def control_thread():
     以 200Hz 运行，死咬靶纸的世界坐标，疯狂下发指令对抗底盘运动
     """
     global w_target_yaw, w_target_pitch, system_running, ctrl_vel_rpm, ctrl_acc
+    global is_searching, search_dir, yaw_scan_speed
 
     while system_running:
         start_time = time.time()
@@ -148,7 +151,16 @@ def control_thread():
         curr_yaw, curr_pitch = 0.0, 0.0
         if pkt is not None:
             _, (_, _, curr_yaw) = pkt
-            
+
+        # ================= 200Hz 平滑轨迹发生器 =================
+        if is_searching:
+            # 严格 200Hz 运行，每次 dt = 0.005 秒。
+            # 如果是 8度/秒，每次只平滑移动 0.04度
+            w_target_yaw += search_dir * yaw_scan_speed * 0.005
+            w_target_yaw = (w_target_yaw + 180) % 360 - 180
+            w_target_pitch = 0.0  # 丢失时强制压平水平搜索
+        # =======================================================
+           
         # 计算空间角度误差
         error_yaw = w_target_yaw - curr_yaw
         error_pitch = w_target_pitch - curr_pitch
@@ -174,6 +186,9 @@ def control_thread():
         dir_yaw = 1 if correction_yaw > 0 else 0
         dir_pitch = 1 if correction_pitch > 0 else 0
         
+        # 动态死区：盲搜时目标一直在动，关闭死区；静止追踪时开启死区防高频微调
+        dead_zone = 0.0 if is_searching else 0.05
+
         # 下发纯速度指令
         try:
             # ============= 新增：调试打印 ================
@@ -182,12 +197,12 @@ def control_thread():
             # ============================================
             
             # 加入 0.05 度的死区，防止到位后电机高频微调发出滋滋声
-            if abs(error_yaw) > 0.05:
+            if abs(error_yaw) > dead_zone:
                 stepper_yaw.emm_v5_vel_control(dir=dir_yaw, vel=vel_out_yaw, acc=ctrl_acc, snF=False)
             else:
-                stepper_yaw.emm_v5_vel_control(dir=dir_yaw, vel=0, acc=ctrl_acc, snF=False) # 瞬间刹停
+                stepper_yaw.emm_v5_vel_control(dir=dir_yaw, vel=0, acc=ctrl_acc, snF=False) 
                 
-            if abs(error_pitch) > 0.05:
+            if abs(error_pitch) > dead_zone:
                 stepper_pitch.emm_v5_vel_control(dir=dir_pitch, vel=vel_out_pitch, acc=ctrl_acc, snF=False)
             else:
                 stepper_pitch.emm_v5_vel_control(dir=dir_pitch, vel=0, acc=ctrl_acc, snF=False)
@@ -202,11 +217,23 @@ def control_thread():
             
 def main():
     global w_target_yaw, w_target_pitch, system_running, ctrl_vel_rpm, ctrl_acc, show_windows
-    global has_tracked_ever, yaw_scan_speed
+    global has_tracked_ever, yaw_scan_speed, is_searching, search_dir
 
     print("视觉跟踪系统启动... 按 'q' 键退出。")
     init_board()
     prev_time = time.time()
+
+    # ================= 强制对齐初始坐标，消除开机摆头 =================
+    print("等待 IMU 初始数据以对齐坐标...")
+    while True:
+        pkt, _, _ = imu.dev.get_latest()
+        if pkt is not None:
+            _, (_, _, initial_yaw) = pkt
+            w_target_yaw = initial_yaw
+            break
+        time.sleep(0.01)
+    print(f"坐标对齐完成，初始 Yaw 锚定为: {w_target_yaw:.2f}°")
+    # ===============================================================
 
     # 启动高速控制线程
     ctrl_thread = threading.Thread(target=control_thread, daemon=True)
@@ -241,35 +268,27 @@ def main():
             # 坐标系变换与目标刷新
             if status in [Status.TRACK, Status.TMP_LOST]:
                 has_tracked_ever = True         # 只要进入跟踪或短暂预测，就激活历史捕获标志
+                is_searching = False            # 关闭盲搜开关
 
                 # 读取当前最新的 IMU 绝对角度进行基准融合
                 w_target_yaw, _ = imu.get_abs(vis_yaw, vis_pitch)
                 w_target_pitch = vis_pitch
             else:
+                is_searching = True             # 开启盲搜开关
                 # 纯视觉环的保命机制：彻底丢失目标时，立刻将 Pitch 误差清零刹车！
                 w_target_pitch = 0.0
                 pid_pitch.reset()  # 清空 PID 积分，防止残留的“力气”让电机乱窜
 
+                # 仅判定方向，由内环完成转动
                 if not has_tracked_ever:
-                    # 【场景一】刚上电，从未抓到过靶子（解决评委任意放置导致背对靶子问题）
-                    # 无条件以 3.0°/s 的速度单向匀速水平扫描
-                    scan_dir = 1.0
-                    w_target_yaw += scan_dir * yaw_scan_speed * loop_dt
-                    w_target_yaw = (w_target_yaw + 180) % 360 - 180
-                    print(f"--> [刚上电盲搜] 采用等效速度 3°/s 巡航扫描中... 目标世界角度: {w_target_yaw:.2f}°")
-                
+                    search_dir = 1.0
+                    print(f"--> [刚上电盲搜] 等效 {yaw_scan_speed}°/s 巡航扫描中...")
                 else:
-                    # 【场景二】行驶或拐弯中途跟跟丢了目标
-                    # 提取卡尔曼滤波器最后记录的画面线速度方向趋势
                     if tracker.last_cx_vel != 0:
-                        scan_dir = float(np.sign(tracker.last_cx_vel))
+                        search_dir = float(np.sign(tracker.last_cx_vel))
                     else:
-                        scan_dir = 1.0 # 默认方向
-                    
-                    # 顺着最后丢失的方向，以 3.0°/s 的速度在世界坐标系下匀速扫掠
-                    w_target_yaw += scan_dir * yaw_scan_speed * loop_dt
-                    w_target_yaw = (w_target_yaw + 180) % 360 - 180
-                    print(f"--> [动态盲搜] 顺着卡尔曼最后方向历史 {scan_dir} 以 3°/s 寻找... 目标世界角度: {w_target_yaw:.2f}°")
+                        search_dir = 1.0
+                    print(f"--> [动态盲搜] 顺着卡尔曼最后方向历史寻找...")
 
             # 激光开火判断
             if not tracker.onfire and status in (Status.TRACK, Status.TMP_LOST):
