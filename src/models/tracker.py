@@ -27,7 +27,7 @@ class Tracker:
         self.system_delay = 0.03 # 系统延迟，单位为秒，初始值为30ms
         self.last_cx_vel = 0.0
 
-        self.lost_count = 0  # 丢帧数
+        self.lost_count = 5  # 丢帧数
         self.frame_lost_tol = 5   # 丢帧容忍度 
         self.last_time = None
 
