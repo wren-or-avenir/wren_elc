@@ -100,9 +100,10 @@ class Tracker:
 
                 # 加上系统延时预测，用predict
                 if self.system_delay > 0:
-                    cx = update_cx + self.last_cx_vel * self.system_delay
-                    cy = update_cy + vy * self.system_delay
-                    dist = update_dist + vdist * self.system_delay
+                    dynamic_delay = 0.03 if update_dist < 115.0 else self.system_delay
+                    cx = update_cx + self.last_cx_vel * dynamic_delay
+                    cy = update_cy + vy * dynamic_delay
+                    dist = update_dist + vdist * dynamic_delay
                 else:
                     cx, cy, dist = update_cx, update_cy, update_dist
             else:
@@ -110,10 +111,14 @@ class Tracker:
                 self.lost_count += 1
                 if self.lost_count <= self.frame_lost_tol:
                     self.status = Status.TMP_LOST   # 状态调整
+
                      # 预测
-                    pred_cx, self.last_cx_vel = self.kf_cx.predict(dt + self.system_delay)
-                    pred_cy, _ = self.kf_cy.predict(dt + self.system_delay)
-                    pred_dist, _ = self.kf_dist.predict(dt + self.system_delay)
+                    last_dist, _ = self.kf_dist.get_state()
+                    dynamic_delay = 0.03 if last_dist < 115.0 else self.system_delay
+                    
+                    pred_cx, self.last_cx_vel = self.kf_cx.predict(dt + dynamic_delay)
+                    pred_cy, _ = self.kf_cy.predict(dt + dynamic_delay)
+                    pred_dist, _ = self.kf_dist.predict(dt + dynamic_delay)
                     cx, cy, dist = pred_cx, pred_cy, pred_dist
                 else:
                     self.status = Status.LOST   # 状态调整
