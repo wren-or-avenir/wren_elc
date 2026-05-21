@@ -165,13 +165,16 @@ class Tracker:
 
         return yaw, pitch, dist, (int(laser_u), int(laser_v))
     
-    def check_onfire(self, pitch, yaw):
-        arrived = False
-        if abs(pitch) < self.onfire_tol and abs(yaw) < self.onfire_tol:
-            arrived = True
+    def check_onfire(self, pitch, yaw, dist):
+        # 距离小于 115cm 时，无视滑块参数，强制放宽到 1.6 度
+        if dist < 115.0:
+            current_tol = 1.6
         else:
-            arrived = False
-        return arrived
+            current_tol = self.onfire_tol
+            
+        if abs(pitch) < current_tol and abs(yaw) < current_tol:
+            return True
+        return False
        
     def track(self, board):
         """对外接口，追踪主逻辑"""
@@ -179,7 +182,7 @@ class Tracker:
             filtered_center, filtered_dist = self.filter(board)
             if self.status != Status.LOST:
                 vis_yaw, vis_pitch, dist, laser_pos = self.solve(filtered_center, filtered_dist)
-                self.onfire = self.check_onfire(vis_pitch, vis_yaw)
+                self.onfire = self.check_onfire(vis_pitch, vis_yaw, dist)
                 self.laser_pos = laser_pos
                 return vis_yaw, vis_pitch, dist, self.status, laser_pos
             else:
