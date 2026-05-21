@@ -24,7 +24,7 @@ class Tracker:
         self.kf_cx = KalmanFilter(q_scale=0.35, r_scale=0.1)    # cx 卡尔曼滤波器
         self.kf_cy = KalmanFilter(q_scale=0.35, r_scale=0.1)    # cy 卡尔曼滤波器
         self.kf_dist = KalmanFilter(q_scale=0.01, r_scale=2.0)  # distance 卡尔曼滤波器
-        self.system_delay = 0.03 # 系统延迟，单位为秒，初始值为30ms
+        self.system_delay = 0.06 # 系统延迟，单位为秒，初始值为30ms
         self.last_cx_vel = 0.0
 
         self.lost_count = 5  # 丢帧数
@@ -166,9 +166,9 @@ class Tracker:
         return yaw, pitch, dist, (int(laser_u), int(laser_v))
     
     def check_onfire(self, pitch, yaw, dist):
-        # 距离小于 115cm 时，无视滑块参数，强制放宽到 1.6 度
+        # 距离小于 115cm 时， 无视滑块参数，强制放宽到 1.6 度
         if dist < 115.0:
-            current_tol = 1.6
+            current_tol = 2.2
         else:
             current_tol = self.onfire_tol
             

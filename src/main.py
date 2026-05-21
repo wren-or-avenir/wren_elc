@@ -46,7 +46,7 @@ ctrl_acc = 0
 
 # ======= 新增：全自主盲搜状态量 =======
 has_tracked_ever = False     
-yaw_scan_speed = 8.0         # 按照需求改为 8.0 度/秒
+yaw_scan_speed = 30.0         # 按照需求改为 8.0 度/秒
 is_searching = False         # 盲搜状态标志，用于通知内环
 search_dir = 1.0             # 盲搜转动方向 (1.0为正向，-1.0为反向)
 # ====================================
@@ -78,7 +78,7 @@ def init_board():
     cv2.createTrackbar('show', 'Controls', 1, 1, nothing)
 
     # ======= 新增：盲搜巡航速度滑块 =======
-    cv2.createTrackbar('scan_speed', 'Controls', 8, 50, nothing) # 默认3度/秒
+    cv2.createTrackbar('scan_speed', 'Controls', 30, 50, nothing) # 默认3度/秒
     # ====================================
 
     # 视差参数 (范围 -5.00cm 到 +5.00cm)   单位：0.01cm
