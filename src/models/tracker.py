@@ -25,7 +25,7 @@ class Tracker:
         self.kf_cy = KalmanFilter(q_scale=0.35, r_scale=0.1)    # cy 卡尔曼滤波器
         self.kf_dist = KalmanFilter(q_scale=0.01, r_scale=2.0)  # distance 卡尔曼滤波器
         self.system_delay = 0.03 # 系统延迟，单位为秒，初始值为30ms
-        self.last_cy_vel = 0.0
+        self.last_cx_vel = 0.0
 
         self.lost_count = 0  # 丢帧数
         self.frame_lost_tol = 5   # 丢帧容忍度 
@@ -94,14 +94,14 @@ class Tracker:
                 pred_cy, _ = self.kf_cy.predict(dt)
                 pred_dist, _ = self.kf_dist.predict(dt)
                 # 更新
-                update_cx, vx = self.kf_cx.update(target.center[0])
-                update_cy, self.last_cy_vel = self.kf_cy.update(target.center[1])
+                update_cx, self.last_cx_vel = self.kf_cx.update(target.center[0])
+                update_cy, vy = self.kf_cy.update(target.center[1])
                 update_dist, vdist = self.kf_dist.update(self.get_dist(target))
 
                 # 加上系统延时预测，用predict
                 if self.system_delay > 0:
-                    cx = update_cx + vx * self.system_delay
-                    cy = update_cy + self.last_cy_vel * self.system_delay
+                    cx = update_cx + self.last_cx_vel * self.system_delay
+                    cy = update_cy + vy * self.system_delay
                     dist = update_dist + vdist * self.system_delay
                 else:
                     cx, cy, dist = update_cx, update_cy, update_dist
@@ -111,8 +111,8 @@ class Tracker:
                 if self.lost_count <= self.frame_lost_tol:
                     self.status = Status.TMP_LOST   # 状态调整
                      # 预测
-                    pred_cx, _ = self.kf_cx.predict(dt + self.system_delay)
-                    pred_cy, self.last_cy_vel = self.kf_cy.predict(dt + self.system_delay)
+                    pred_cx, self.last_cx_vel = self.kf_cx.predict(dt + self.system_delay)
+                    pred_cy, _ = self.kf_cy.predict(dt + self.system_delay)
                     pred_dist, _ = self.kf_dist.predict(dt + self.system_delay)
                     cx, cy, dist = pred_cx, pred_cy, pred_dist
                 else:

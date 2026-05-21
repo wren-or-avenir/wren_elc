@@ -262,7 +262,7 @@ def main():
                     # 【场景二】行驶或拐弯中途跟跟丢了目标
                     # 提取卡尔曼滤波器最后记录的画面线速度方向趋势
                     if tracker.last_cy_vel != 0:
-                        scan_dir = float(np.sign(tracker.last_cy_vel))
+                        scan_dir = float(np.sign(tracker.last_cx_vel))
                     else:
                         scan_dir = 1.0 # 默认方向
                     
